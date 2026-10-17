@@ -159,6 +159,25 @@ If the student critic does not match the teacher critic architecture, add:
 algo.config.load_teacher_critic=false
 ```
 
+### Custom basketball bowl hands
+
+`+robot=g1/g1_29dof_model16` uses
+`humanoidverse/asset/robots/g1/g1_29dof_mode16_bb.urdf` for training and
+`g1_29dof_mode16_bb.xml` in the same directory for motion FK. Their joint
+origins are aligned. Both retain 29 actuated joints; training merges the fixed
+hands into the wrists, giving 30 simulated bodies.
+
+Each bowl has 112 convex collision parts that preserve its cavity. The URDF
+loads `meshes/bowl_convex/{left,right}_compound.obj` directly with
+`convex_decomposition_from_submeshes=true`. The XML references the corresponding
+individual hull OBJs as separate collision geoms. These meshes use millimetres
+and an asset scale of `0.001`. Body collision settings are unchanged, and
+`robot.asset.self_collisions=0` enables self collision.
+
+Inspect the final collision parts in the
+[assembled/exploded image](humanoidverse/asset/robots/g1/meshes/bowl_convex/decomposition.png)
+or [rotatable 3D view](humanoidverse/asset/robots/g1/meshes/bowl_convex/decomposition.html).
+
 ### Common overrides
 
 The object asset is normally inferred from the motion filename, so training

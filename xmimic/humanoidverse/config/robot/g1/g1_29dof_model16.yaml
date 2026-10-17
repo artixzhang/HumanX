@@ -253,11 +253,13 @@ robot:
     angular_damping: 0.
     linear_damping: 0.
 
-    urdf_file: "g1/${robot.asset.robot_type}_mode15_w_hand.urdf"
+    urdf_file: "g1/${robot.asset.robot_type}_mode16_bb.urdf"
     # usd_file: "g1/${robot.asset.robot_type}.usd"
-    # xml_file: "g1/${robot.asset.robot_type}.xml"
+    xml_file: "g1/${robot.asset.robot_type}_mode16_bb.xml"
     robot_type: g1_29dof
     self_collisions: 0 # 1 to disable, 0 to enable self collisions
+    # Preserve the 112 exported convex parts in each hand OBJ.
+    convex_decomposition_from_submeshes: True
     default_dof_drive_mode: 3
 
     fix_base_link: False # TEST: fix base link to world
@@ -267,7 +269,7 @@ robot:
     # motion_file : 'data/motions/g1_29dof/v1/singles/0-ACCAD_Male2General_c3d_A6- Box lift_poses.pkl'
     asset:
       assetRoot: "humanoidverse/asset/robots/g1/"
-      assetFileName: "g1_29dof.xml"
+      assetFileName: "g1_29dof_mode16_bb.xml"
       # urdfFileName: "g1_29dof_mode15_w_hand.urdf"
 
     humanoid_type: g1_29dof

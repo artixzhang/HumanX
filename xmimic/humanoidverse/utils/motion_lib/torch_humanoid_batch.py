@@ -335,6 +335,12 @@ class Humanoid_Batch:
             mesh_file = mesh_file_node.attrib["file"]
             mesh_full_file = osp.join(mesh_base, mesh_file)
             mesh_obj = o3d.io.read_triangle_mesh(mesh_full_file)
+            # MJCF mesh coordinates may be in millimetres (the bowl hands are).
+            # Open3D reads the file's native units, so apply the asset scale here.
+            scale = np.fromstring(mesh_file_node.attrib.get("scale", "1 1 1"), sep=" ")
+            mesh_obj.vertices = o3d.utility.Vector3dVector(
+                np.asarray(mesh_obj.vertices) * scale
+            )
             mesh_dict[mesh_name] = mesh_obj
 
         geom_transform = {}
@@ -346,14 +352,12 @@ class Humanoid_Batch:
                 parent = find_parent(xml_doc_root, geom_node)
                 body_to_mesh[parent.attrib['name']].add(geom_node.attrib['mesh'])
                 mesh_to_body[geom_node] = parent
-                if "pos" in geom_node.attrib or "quat" in geom_node.attrib:
-                    geom_transform[parent.attrib['name']] = {}
-                    geom_transform[parent.attrib['name']]["pos"] = np.array([0.0, 0.0, 0.0])
-                    geom_transform[parent.attrib['name']]["quat"] = np.array([1.0, 0.0, 0.0, 0.0])
-                    if "pos" in geom_node.attrib:
-                        geom_transform[parent.attrib['name']]["pos"] = np.array([float(f) for f in geom_node.attrib['pos'].split(" ")])
-                    if "quat" in geom_node.attrib:
-                        geom_transform[parent.attrib['name']]["quat"] = np.array([float(f) for f in geom_node.attrib['quat'].split(" ")])
+                # Several meshes can belong to the same body with different
+                # local offsets (wrist housing and fixed bowl, for example).
+                geom_transform[geom_node] = {
+                    "pos": np.fromstring(geom_node.attrib.get("pos", "0 0 0"), sep=" "),
+                    "quat": np.fromstring(geom_node.attrib.get("quat", "1 0 0 0"), sep=" "),
+                }
                     
             else:
                 pass
@@ -379,26 +383,19 @@ class Humanoid_Batch:
         for geom in geoms:
             if 'mesh' not in geom.attrib:
                 continue
-            parent_name = geom.attrib['mesh']
-
             k = self.mesh_to_body[geom].attrib['name']
-            mesh_names = self.body_to_mesh[k]
             body_idx = self.body_names.index(k)
             
             body_trans = g_trans[body_idx].numpy().copy()
             body_rot = g_rot[body_idx].numpy().copy()
-            for mesh_name in mesh_names:
-                mesh_obj = copy.deepcopy(self.mesh_dict[mesh_name])
-                if k in self.geom_transform:
-                    pos = self.geom_transform[k]['pos']
-                    quat = self.geom_transform[k]['quat']
-                    body_trans = body_trans + body_rot @ pos
-                    global_rot =  (body_rot   @ sRot.from_quat(quat[[1, 2, 3, 0]]).as_matrix()).T
-                else:
-                    global_rot = body_rot.T
-                mesh_obj.rotate(global_rot.T, center=(0, 0, 0))
-                mesh_obj.translate(body_trans)
-                joined_mesh_obj.append(mesh_obj)
+            mesh_obj = copy.deepcopy(self.mesh_dict[geom.attrib['mesh']])
+            pos = self.geom_transform[geom]['pos']
+            quat = self.geom_transform[geom]['quat']
+            geom_trans = body_trans + body_rot @ pos
+            geom_rot = body_rot @ sRot.from_quat(quat[[1, 2, 3, 0]]).as_matrix()
+            mesh_obj.rotate(geom_rot, center=(0, 0, 0))
+            mesh_obj.translate(geom_trans)
+            joined_mesh_obj.append(mesh_obj)
                 
         # Merge all meshes into a single mesh
         merged_mesh = joined_mesh_obj[0]

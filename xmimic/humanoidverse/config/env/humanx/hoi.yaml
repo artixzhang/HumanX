@@ -78,7 +78,7 @@ env:
     resample_motion_when_training: False
     resample_time_interval_s: 2000
 
-    noise_to_initial_level: 1.0
+    noise_to_initial_level: 0.3
     init_noise_scale: 
       dof_pos: 0.1
       dof_vel: 0.01

@@ -408,6 +408,10 @@ class IsaacGym(IsaacGymBase):
         # wyh
         asset_options.vhacd_enabled = True
         asset_options.vhacd_params.max_convex_hulls = 32
+        # Import each exported bowl submesh as its own convex collision shape.
+        asset_options.convex_decomposition_from_submeshes = bool(
+            getattr(asset_cfg, "convex_decomposition_from_submeshes", False)
+        )
 
         def set_value_if_not_none(prev_value, new_value):
             return new_value if new_value is not None else prev_value

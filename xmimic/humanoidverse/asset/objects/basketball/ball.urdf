@@ -9,7 +9,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.1"/>
+        <sphere radius="0.123"/>
           <!--<mesh filename="meshes/ball.obj"/>-->
       </geometry>
       <material name="Grey">
@@ -19,7 +19,7 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.1"/>
+        <sphere radius="0.123"/>
         <!--<mesh filename="meshes/ball.obj"/>-->
       </geometry>
     </collision>

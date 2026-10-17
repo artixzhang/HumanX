@@ -19,7 +19,7 @@ def resolve_robot_urdf_paths(robot_type):
         raise ValueError(f"Unsupported robot_type: {robot_type}")
 
     asset_root = REPO_ROOT / "humanoidverse/asset/robots/g1"
-    urdf_path = asset_root / "g1_29dof_mode16.urdf"
+    urdf_path = asset_root / "g1_29dof_mode16_bb.urdf"
     mesh_root = asset_root
     return urdf_path, mesh_root
 
@@ -160,6 +160,7 @@ class RerunURDF():
         link2mesh = {}
         for visual in self.robot.visual_model.geometryObjects:
             mesh = trimesh.load_mesh(visual.meshPath)
+            mesh.apply_scale(np.asarray(visual.meshScale))
             name = visual.name[:-2]
             mesh.visual = trimesh.visual.ColorVisuals()
             mesh.visual.vertex_colors = visual.meshColor
