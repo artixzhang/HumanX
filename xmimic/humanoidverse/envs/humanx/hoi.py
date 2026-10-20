@@ -345,7 +345,8 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             self.config.robot.motion, 
             num_envs=self.num_envs, 
             device=self.device,
-            adaptive_sampling_cfg=self.config if adaptive_sampling_enabled else None
+            adaptive_sampling_cfg=self.config if adaptive_sampling_enabled else None,
+            skill_sampling_cfg=getattr(self.config, "skill_sampling", None),
         )
         if self.is_evaluating:
             self._motion_lib.load_motions(random_sample=False)
@@ -2903,7 +2904,9 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         return self._obs_phase
     
     def _get_obs_basket_pos(self):
-        return self.ref_basket_pos
+        # Pelvis-relative cylindrical coordinates; axes follow yaw only.
+        x, y, z = self.ref_basket_pos.unbind(dim=-1)
+        return torch.stack((torch.sqrt(x * x + y * y), torch.atan2(y, x), z), dim=-1)
     
     def _get_obs_skill_label(self):
         return self.skill_label

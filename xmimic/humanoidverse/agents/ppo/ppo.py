@@ -814,11 +814,15 @@ class PPO(BaseAlgo):
             remaining_iters = max(int(total_iter - (log_dict["it"] + 1)), 0)
             eta_s = self.tot_time / elapsed_iters * remaining_iters
 
+        eta_hours, eta_remainder = divmod(int(eta_s), 3600)
+        eta_minutes, eta_seconds = divmod(eta_remainder, 60)
+        total_hours, total_remainder = divmod(int(self.tot_time), 3600)
+        total_minutes, total_seconds = divmod(total_remainder, 60)
         log_string += (f"""{'-' * width}\n"""
                        f"""{'Total timesteps:':>{pad}} {self.tot_timesteps}\n"""
                        f"""{'Iteration time:':>{pad}} {iteration_time:.2f}s\n"""
-                       f"""{'Total time:':>{pad}} {self.tot_time:.2f}s\n"""
-                       f"""{'ETA:':>{pad}} {eta_s:.1f}s\n""")
+                       f"""{'Total time:':>{pad}} {total_hours:02d}:{total_minutes:02d}:{total_seconds:02d}\n"""
+                       f"""{'ETA:':>{pad}} {eta_hours:02d}:{eta_minutes:02d}:{eta_seconds:02d}\n""")
         log_string += f"Logging Directory: {self.log_dir}"
 
         # Use rich Live to update a specific section of the console

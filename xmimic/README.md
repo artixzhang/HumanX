@@ -115,6 +115,52 @@ python humanoidverse/train_agent.py \
   env.config.init_noise_scale.obj_pos=0.1
 ```
 
+Skill-based training proportions are opt-in. Add `+opt=skill_sampling` after
+`+exp=...` in the training command to load
+`humanoidverse/config/opt/skill_sampling.yaml`. It enables
+`env.config.skill_sampling.enabled` and provides example relative weights
+`0:0.70, 1:0.20, 2:0.10` for shoot/hold/stand. Match these IDs to the one-hot
+columns in your own merged dataset; each positive-weight skill must exist.
+Omitted skills receive zero environments. A single-skill PKL can use the default
+sampler without this option.
+
+Edit the YAML weights, or override individual values at launch:
+
+```text
++opt=skill_sampling \
+env.config.skill_sampling.weights.0=0.8 \
+env.config.skill_sampling.weights.1=0.1 \
+env.config.skill_sampling.weights.2=0.1
+```
+
+Use `env.config.skill_sampling.enabled=false` to explicitly disable it, or
+omit `+opt=skill_sampling` to retain the original motion sampler. Multiple opt
+configs can be combined with `'+opt=[wandb,skill_sampling]'`.
+Enabled sampling assigns environment counts by largest remainder, samples
+clips uniformly within each skill, and logs target/actual allocations. Each
+clip must have a constant one-hot `skill_label`. Sequential evaluation and
+within-motion RSI are unchanged; independent AMP expert data keeps its existing
+sampler. Motion reloading is not enabled automatically: the existing
+`env.config.resample_motion_when_training` still controls clip refreshes.
+
+For shooting data converted by `tools/bb_to_humanx.py`, replace the observation
+and motion overrides above with:
+
+```text
++obs=humanx/hoi_teacher_skills
+robot.motion.motion_file=data/motions/batch_setshot_1019_humanx.pkl
+```
+
+This configuration uses Cartesian `basket_pos` and a 42-dimensional `skill_label`
+from each motion. The `basket_pos` observation is computed as `[horizontal
+distance (m), relative azimuth (rad), height difference (m)]` from the current
+pelvis position and yaw; roll and pitch do not tilt its axes. PKL `hoop_pos_cyl`
+is not read. Deployment must use the same coordinate convention. The actor has
+no phase or reference command; critic references, histories and AMP inputs are
+preserved. For G1 with 29 DOFs, actor/critic inputs are 554/1180 dimensions.
+When assembling deployment observations, follow the framework's alphabetical
+ordering of observation keys, rather than the YAML list order.
+
 For the AMP teacher configuration, replace the experiment and observation
 overrides with:
 
@@ -151,7 +197,8 @@ python humanoidverse/train_agent.py \
 This DAggerBC observation config is compatible with a teacher trained using
 `+obs=humanx/hoi_teacher_tracking` with the same reference-command settings.
 For the teacher checkpoint used in this example, the expected input sizes are
-`teacher actor=572` and `teacher critic=1135`.
+`teacher actor=572` and `teacher critic=1135`. A `hoi_teacher_skills` checkpoint
+uses 554/1180 inputs and needs a matching student teacher-observation layout.
 
 If the student critic does not match the teacher critic architecture, add:
 

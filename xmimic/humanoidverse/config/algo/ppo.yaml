@@ -19,13 +19,13 @@ algo:
     desired_kl: 0.01
 
     num_steps_per_env: 24
-    save_interval: 1000
+    save_interval: 500
 
     load_optimizer: True
 
     init_noise_std: 0.8 #0.8 #?
 
-    num_learning_iterations: 1000000
+    num_learning_iterations: 10000
     init_at_random_ep_len: True
     eval_callbacks: null
 

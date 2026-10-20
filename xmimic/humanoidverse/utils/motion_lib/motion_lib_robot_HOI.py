@@ -1,13 +1,16 @@
 from humanoidverse.utils.motion_lib.motion_lib_base import *
 from humanoidverse.utils.motion_lib.torch_humanoid_batch import Humanoid_Batch
 from humanoidverse.utils.motion_lib.motion_utils.support import derive_support_top_pose_from_motion
+from humanoidverse.utils.motion_lib.motion_utils.skill_sampling import sample_motions_by_skill
 from humanoidverse.utils.smpl_reference import resolve_smpl_joints_local_centered
 
 class MotionLibRobotHOI(MotionLibBase):
-    def __init__(self, motion_lib_cfg, num_envs, device, adaptive_sampling_cfg=None):
+    def __init__(self, motion_lib_cfg, num_envs, device, adaptive_sampling_cfg=None,
+                 skill_sampling_cfg=None):
         super().__init__(motion_lib_cfg = motion_lib_cfg, num_envs = num_envs, device = device)
         self.mesh_parsers = Humanoid_Batch(motion_lib_cfg)
         self._adaptive_sampling_cfg = adaptive_sampling_cfg
+        self._skill_sampling_cfg = skill_sampling_cfg
         return
     
     # def load_motions(self, 
@@ -142,6 +145,16 @@ class MotionLibRobotHOI(MotionLibBase):
     #     logger.info(f"Loaded {num_motions:d} motions with a total length of {total_len:.3f}s and {self.gts.shape[0]} frames.")
     #     return motions
 
+    def _sample_motion_indices(self, random_sample, start_idx=0):
+        if not random_sample:
+            return (torch.arange(self.num_envs, device=self._device) + start_idx) % self._num_unique_motions
+        cfg = getattr(self, "_skill_sampling_cfg", None)
+        if cfg is not None and cfg.get("enabled", False):
+            return sample_motions_by_skill(
+                self._motion_data_list, cfg.get("weights", {}), self.num_envs, self._device
+            )
+        return torch.multinomial(self._sampling_prob, self.num_envs, replacement=True).to(self._device)
+
     def load_motions(self, 
                      random_sample=True, 
                      start_idx=0, 
@@ -170,10 +183,7 @@ class MotionLibRobotHOI(MotionLibBase):
         self.num_joints = len(self.skeleton_tree.node_names)
         num_motion_to_load = self.num_envs
 
-        if random_sample:
-            sample_idxes = torch.multinomial(self._sampling_prob, num_samples=num_motion_to_load, replacement=True).to(self._device)
-        else:
-            sample_idxes = torch.remainder(torch.arange(num_motion_to_load) + start_idx, self._num_unique_motions ).to(self._device)
+        sample_idxes = self._sample_motion_indices(random_sample, start_idx)
 
         # Hard code: force-select one specific sample.
         # Uncomment the two lines below and set desired_motion_idx to hard-code a sample.

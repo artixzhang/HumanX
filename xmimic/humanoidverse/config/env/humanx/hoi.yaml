@@ -78,6 +78,11 @@ env:
     resample_motion_when_training: False
     resample_time_interval_s: 2000
 
+    # Opt-in training environment allocation; enable with +opt=skill_sampling.
+    skill_sampling:
+      enabled: false
+      weights: {}
+
     noise_to_initial_level: 0.3
     init_noise_scale: 
       dof_pos: 0.1
@@ -149,6 +154,9 @@ eval_overrides:
   env:
     config: 
       max_episode_length_s: 100000
+      # Disable before evaluation constructs the environment/motion library.
+      skill_sampling:
+        enabled: false
 
 debug_termination:
   enabled: true

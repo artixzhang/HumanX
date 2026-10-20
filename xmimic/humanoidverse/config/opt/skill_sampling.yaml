@@ -1,0 +1,18 @@
+# @package _global_
+
+# Enable explicitly with +opt=skill_sampling (place after +exp=...).
+# Skill IDs are one-hot column indices from the converted data, not filenames.
+# Relative weights: 7:2:1 and 0.7:0.2:0.1 are equivalent. Unlisted skills get 0.
+# Example below assumes 0=shoot, 1=hold, 2=stand; change to match your dataset.
+# A positive weight for a skill absent from the data is an error.
+# Only training reference-motion allocation changes; sequential evaluation and
+# within-motion RSI keep their existing behavior. No motion reload is enabled.
+env:
+  config:
+    skill_sampling:
+      enabled: true
+      weights:
+        "0": 0.10
+        "1": 0.70
+        "2": 0.10
+        "3": 0.10
