@@ -3,8 +3,9 @@
 # Shooting actor: proprioception + ball + hoop command + skill; no future reference.
 # Keep the privileged tracking critic and preserve all existing histories.
 obs:
-  # basket_pos: [horizontal distance (m), heading-relative azimuth (rad),
-  # height above pelvis (m)], computed from the motion's Cartesian basket_pos.
+  # basket_pos: root-relative [x, y, z] in meters, recomputed every control step
+  # from the motion's world-space basket_pos and the current robot root pose.
+  # Axes follow root yaw only; roll and pitch do not tilt them.
   obs_dict:
     actor_obs: [
       base_ang_vel,

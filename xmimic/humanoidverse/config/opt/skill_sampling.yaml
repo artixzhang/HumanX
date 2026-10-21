@@ -12,7 +12,7 @@ env:
     skill_sampling:
       enabled: true
       weights:
-        "0": 0.10
-        "1": 0.70
-        "2": 0.10
-        "3": 0.10
+        "0": 0.15 # hold
+        "1": 0.55 # shoot
+        "2": 0.15 # stand
+        "3": 0.15 # stand to hold

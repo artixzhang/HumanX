@@ -3,6 +3,17 @@ from __future__ import annotations
 import torch
 
 
+def quaternion_angle_squared(quat: torch.Tensor) -> torch.Tensor:
+    """Squared shortest rotation angle in radians for relative xyzw quaternions.
+
+    Preserve leading batch dimensions and treat q and -q as the same rotation.
+    Normalize without modifying the input to tolerate quaternion norm drift.
+    """
+    q = quat / torch.norm(quat, dim=-1, keepdim=True).clamp(min=1e-9)
+    angle = 2.0 * torch.atan2(torch.norm(q[..., :3], dim=-1), q[..., 3].abs())
+    return angle.square()
+
+
 def get_rigid_bodies_per_env(rigid_body_state: torch.Tensor, num_envs: int) -> int:
     total_bodies = int(rigid_body_state.shape[0])
     if num_envs <= 0 or total_bodies % int(num_envs) != 0:

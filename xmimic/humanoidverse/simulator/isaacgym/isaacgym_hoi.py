@@ -722,8 +722,10 @@ class IsaacGym(IsaacGymBase):
 
     def _build_each_env(self, env_id, env_ptr):
         start_pose = gymapi.Transform()
-        start_pose.p = gymapi.Vec3(*self.base_init_state[:3])
-        pos = self.env_origins[env_id].clone()
+        # Keep the configured initial clearance before the first motion reset.
+        # Spawning at the terrain origin embeds the robot in the ground during
+        # prepare_sim; later reference resets can leave GPU foot contacts unstable.
+        pos = self.env_origins[env_id] + self.base_init_state[:3]
         pos[:2] += torch_rand_float(-1., 1., (2, 1), device=str(self.device)).squeeze(1)
         start_pose.p = gymapi.Vec3(*pos)
 

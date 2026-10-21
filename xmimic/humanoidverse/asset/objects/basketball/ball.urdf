@@ -2,9 +2,9 @@
 <robot name="ball">
   <link name="ball">
     <inertial>
-      <mass value="0.5"/>
+      <mass value="0.6"/>
       <origin rpy="0 0 0" xyz="0 0 0"/>
-      <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+      <inertia ixx="0.006" ixy="0" ixz="0" iyy="0.006" iyz="0" izz="0.006"/>
     </inertial>
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>

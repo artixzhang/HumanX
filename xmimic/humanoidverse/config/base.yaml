@@ -10,7 +10,7 @@ defaults:
 seed: 0
 codebase_version: 1.0  # this is recorded to enable auto-conversion of models between different versions of the codebase
 headless: True
-num_envs: 8192
+num_envs: 4096
 
 ### Checkpoint logic
 auto_load_latest: False

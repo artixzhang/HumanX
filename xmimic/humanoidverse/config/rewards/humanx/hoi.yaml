@@ -10,13 +10,13 @@ rewards:
   # if False, ignore yaw (rotation about world Z) when computing ball_rotation reward
   ball_rotation_consider_yaw: True
   reward_scales:
-      teleop_body_position_extend: 1.0
+      teleop_body_position_extend: 1.5
       teleop_vr_3point: 1.6
       teleop_body_position_feet: 2.1
-      teleop_body_rotation_extend: 0.5
+      teleop_body_rotation_extend: 1.0
       teleop_body_ang_velocity_extend: 0.5
       teleop_body_velocity_extend: 1.0
-      teleop_joint_position: 0.75
+      teleop_joint_position: 1.5
       teleop_joint_velocity: 0.5
       penalty_torques: -0.00001
       # penalty_dof_vel: -0.0001
@@ -25,7 +25,7 @@ rewards:
       # penalty_feet_contact_forces: -0.01
       # penalty_stumble: -10.0
 
-      ig_extended_hand: 2.0
+      ig_extended_hand: 5.0
       waist_dof: -50 #-100. #5.0
       hip_yaw_dof: -20 # for penalize hip yaw dof
       ball_position: 4.0 #3.0
@@ -71,7 +71,7 @@ rewards:
     teleop_joint_pos: 1.0
     teleop_joint_vel: 1.0
 
-    ig_extended_hand: 0.05
+    ig_extended_hand: 0.02
     waist_dof: 0.05
     hip_yaw_dof: 0.05
     ball_position: 0.02

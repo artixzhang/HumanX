@@ -151,13 +151,24 @@ and motion overrides above with:
 robot.motion.motion_file=data/motions/batch_setshot_1019_humanx.pkl
 ```
 
-This configuration uses Cartesian `basket_pos` and a 42-dimensional `skill_label`
-from each motion. The `basket_pos` observation is computed as `[horizontal
-distance (m), relative azimuth (rad), height difference (m)]` from the current
-pelvis position and yaw; roll and pitch do not tilt its axes. PKL `hoop_pos_cyl`
-is not read. Deployment must use the same coordinate convention. The actor has
-no phase or reference command; critic references, histories and AMP inputs are
-preserved. For G1 with 29 DOFs, actor/critic inputs are 554/1180 dimensions.
+This configuration uses world-space Cartesian `basket_pos` and a 42-dimensional
+`skill_label` from each motion. The `basket_pos` observation is root-relative
+`[x, y, z]` in meters, recomputed every control step as
+`R_yaw(root_now)^T @ (basket_world - root_world_now)`. Its origin follows the
+current robot pelvis and its axes follow yaw only; roll and pitch do not tilt
+the axes. The relative observation updates as the robot moves, even when the
+basket's world position is fixed. PKL `hoop_pos_cyl` is not read.
+
+Deployment must construct this observation before every policy inference using
+the latest motion-capture basket and robot root poses in the same world frame.
+If motion capture already supplies relative xyz, it must use this same
+yaw-only frame; do not transform it a second time or freeze it at skill start.
+The input remains three-dimensional, but checkpoints trained with cylindrical
+`[distance, azimuth, height]` inputs require retraining or adaptation.
+
+The actor has no phase or reference command; critic references, histories and
+AMP inputs are preserved. For G1 with 29 DOFs, actor/critic inputs are 554/1180
+dimensions.
 When assembling deployment observations, follow the framework's alphabetical
 ordering of observation keys, rather than the YAML list order.
 

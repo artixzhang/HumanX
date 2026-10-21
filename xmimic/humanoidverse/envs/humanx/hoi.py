@@ -36,6 +36,7 @@ from humanoidverse.utils.hoi_runtime import (
     apply_xy_only_init_noise,
     build_hoi_body_contact_force,
     get_hoi_object_contact,
+    quaternion_angle_squared,
     support_top_to_world_center,
 )
 from humanoidverse.utils.motion_lib.motion_utils.support import parked_support_center
@@ -1544,7 +1545,8 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         
         
         #object
-        #compute ref basket pos
+        # Recompute basket xyz every control step from the current robot root
+        # position and yaw, even when the basket's world position is fixed.
         global_ref_basket_pos = ref_basket_pos.unsqueeze(1) - self.simulator.robot_root_states[:, :3].view(env_batch_size, 1, 3)
         local_ref_basket_pos = my_quat_rotate(heading_inv_rot, global_ref_basket_pos.view(-1, 3))
         self.ref_basket_pos = local_ref_basket_pos.view(env_batch_size, -1)# (num_envs, 3) 
@@ -2904,9 +2906,8 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         return self._obs_phase
     
     def _get_obs_basket_pos(self):
-        # Pelvis-relative cylindrical coordinates; axes follow yaw only.
-        x, y, z = self.ref_basket_pos.unbind(dim=-1)
-        return torch.stack((torch.sqrt(x * x + y * y), torch.atan2(y, x), z), dim=-1)
+        # Current root-relative [x, y, z] in meters; axes follow yaw only.
+        return self.ref_basket_pos
     
     def _get_obs_skill_label(self):
         return self.skill_label
@@ -3122,7 +3123,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         anchor_idx = self._get_anchor_body_index()
         # dif_global_body_rot is relative quaternion error (ref * inv(curr)) in xyzw
         anchor_rot_diff = self.dif_global_body_rot[:, anchor_idx, :]  # (N, 4)
-        diff_dist = (anchor_rot_diff ** 2).mean(dim=-1)
+        diff_dist = quaternion_angle_squared(anchor_rot_diff)
         sigma = getattr(self.config.rewards.reward_tracking_sigma, "teleop_anchor_rot",
                         self.config.rewards.reward_tracking_sigma.teleop_body_rot)
         return torch.exp(-diff_dist / sigma)
@@ -3284,7 +3285,9 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             if len(ids) > 0:
                 rotation_diff = rotation_diff[:, ids, :]
 
-        diff_body_rot_dist = (rotation_diff**2).mean(dim=-1).mean(dim=-1)
+        # A unit quaternion's squared component norm is constant; track the
+        # actual angular error (radians squared), averaged across bodies.
+        diff_body_rot_dist = quaternion_angle_squared(rotation_diff).mean(dim=-1)
         r_body_rot = torch.exp(-diff_body_rot_dist / self.config.rewards.reward_tracking_sigma.teleop_body_rot)
         return r_body_rot
 
@@ -3335,7 +3338,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
     def _reward_ball_rotation(self):
         consider_yaw = getattr(self.config.rewards, "ball_rotation_consider_yaw", True)
         ball_rot_diff = self.dif_global_ball_rot if consider_yaw else self._remove_yaw_from_rel_quat(self.dif_global_ball_rot)
-        diff_ball_rot_dist = (ball_rot_diff**2).mean(dim=-1)
+        diff_ball_rot_dist = quaternion_angle_squared(ball_rot_diff)
         r_ball_rot = torch.exp(-diff_ball_rot_dist / self.config.rewards.reward_tracking_sigma.ball_rotation)
         return r_ball_rot
     
