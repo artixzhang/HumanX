@@ -264,6 +264,44 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             except Exception:
                 pass
         self._bm_end_effector_body_indices = bm_ee_indices
+        self._init_reward_tracking_sigma_curriculum()
+
+    def _init_reward_tracking_sigma_curriculum(self):
+        cfg = getattr(self.config.rewards, "reward_tracking_sigma_curriculum", None)
+        self._use_sigma_curriculum = bool(cfg and getattr(cfg, "enable", False))
+        self._sigma_curriculum_ema = {}
+        self._sigma_curriculum_bounds = {}
+        if not self._use_sigma_curriculum:
+            return
+        self._sigma_curriculum_beta = float(getattr(cfg, "ema_beta", 0.99))
+        self._sigma_curriculum_down_th = float(getattr(cfg, "level_down_threshold", 0.45))
+        self._sigma_curriculum_up_th = float(getattr(cfg, "level_up_threshold", 0.70))
+        self._sigma_curriculum_degree = float(getattr(cfg, "degree", 0.00025))
+        sigmas_cfg = getattr(cfg, "sigmas", {})
+        for name in list(getattr(sigmas_cfg, "keys", lambda: [])()):
+            item = sigmas_cfg[name]
+            init_val = float(getattr(item, "initial", getattr(self.config.rewards.reward_tracking_sigma, name)))
+            min_val = float(getattr(item, "min", init_val))
+            max_val = float(getattr(item, "max", init_val))
+            setattr(self.config.rewards.reward_tracking_sigma, name, init_val)
+            self._sigma_curriculum_bounds[name] = (min_val, max_val)
+            logger.info(f"Sigma curriculum [{name}]: initial={init_val}, min={min_val}, max={max_val}")
+
+    def _update_reward_tracking_sigma_curriculum(self):
+        if not self._use_sigma_curriculum or getattr(self, "is_evaluating", False):
+            return
+        deg = self._sigma_curriculum_degree
+        for name, (min_val, max_val) in self._sigma_curriculum_bounds.items():
+            ema = self._sigma_curriculum_ema.get(name, None)
+            if ema is None:
+                continue
+            sigma = float(getattr(self.config.rewards.reward_tracking_sigma, name))
+            if ema < self._sigma_curriculum_down_th:
+                sigma *= (1.0 + deg)
+            elif ema > self._sigma_curriculum_up_th:
+                sigma *= (1.0 - deg)
+            sigma = float(np.clip(sigma, min_val, max_val))
+            setattr(self.config.rewards.reward_tracking_sigma, name, sigma)
 
     def _sample_visualization_motion_state(self):
         motion_time = self.episode_length_buf * self.dt + self.motion_start_times
@@ -931,6 +969,8 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             self._update_terminate_when_motion_far_curriculum()
         if self.config.termination.terminate_when_ball_status_far and self.config.termination_curriculum.terminate_when_ball_status_far_curriculum:
             self._update_terminate_when_ball_status_far_curriculum()
+        if getattr(self, "_use_sigma_curriculum", False):
+            self._update_reward_tracking_sigma_curriculum()
 
         # reset packet loss state for reset envs
         if self._packet_loss_enabled:
@@ -1741,10 +1781,21 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             adds each terms to the episode sums and to the total reward
         """
         self.rew_buf[:] = 0.
+        window_mask = (
+            self.episode_length_buf + (self.motion_start_times / self.dt).to(int) < self.stand_ref_episode_length
+        )
+        has_window = bool(torch.any(window_mask))
         
         for i in range(len(self.reward_functions)):
             name = self.reward_names[i]
-            rew = self.reward_functions[i]() * self.reward_scales[name]
+            raw_rew = self.reward_functions[i]()
+            if getattr(self, "_use_sigma_curriculum", False) and name in self._sigma_curriculum_bounds and has_window:
+                step_mean = raw_rew[window_mask].mean().item()
+                prev = self._sigma_curriculum_ema.get(name, None)
+                self._sigma_curriculum_ema[name] = (
+                    step_mean if prev is None else self._sigma_curriculum_beta * prev + (1.0 - self._sigma_curriculum_beta) * step_mean
+                )
+            rew = raw_rew * self.reward_scales[name]
             try:
                 assert rew.shape[0] == self.num_envs
             except:
@@ -1755,11 +1806,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
                     rew *= self.reward_penalty_scale
             # only use object_related_rewards when current time < stand_ref_episode_length
             if name in self.object_related_rewards:
-                rew = torch.where(
-                    self.episode_length_buf + (self.motion_start_times/self.dt).to(int) < self.stand_ref_episode_length,
-                    rew,
-                    rew*0.
-                )
+                rew = torch.where(window_mask, rew, rew * 0.)
             self.rew_buf += rew
             self.episode_sums[name] += rew
         if self.config.rewards.only_positive_rewards:
@@ -1771,10 +1818,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             self.episode_sums["termination"] += rew
 
         # Contact error tracking (cg_reward != 1) within the same time window as object_related_rewards.
-        window_mask = (
-            self.episode_length_buf + (self.motion_start_times / self.dt).to(int) < self.stand_ref_episode_length
-        )
-        if torch.any(window_mask):
+        if has_window:
             forbidden_contact_error = (self.no_bodies_contact_status != 0).to(torch.float32)
             object_contact_mismatch_error = (self.object_contact_status != 0).to(torch.float32)
             missed_object_contact_error = (self.object_contact_status < 0).to(torch.float32)
@@ -1799,6 +1843,11 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             self.log_dict["soft_dof_vel_curriculum_value"] = torch.tensor(self.soft_dof_vel_curriculum_value, dtype=torch.float)
         if self.use_reward_limits_torque_curriculum:
             self.log_dict["soft_torque_curriculum_value"] = torch.tensor(self.soft_torque_curriculum_value, dtype=torch.float)
+        if getattr(self, "_use_sigma_curriculum", False):
+            for name in self._sigma_curriculum_bounds:
+                self.log_dict[f"sigma_{name}"] = torch.tensor(
+                    float(getattr(self.config.rewards.reward_tracking_sigma, name)), dtype=torch.float
+                )
         
         if self.add_noise_currculum:
             self.log_dict["current_noise_curriculum_value"] = torch.tensor(self.current_noise_curriculum_value, dtype=torch.float)
@@ -2367,6 +2416,23 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         else:
             self._reset_object_states(env_ids)
             
+    def _get_init_obj_pos_noise(self, env_ids, motion_res):
+        base_scale = float(self.config.init_noise_scale.obj_pos)
+        level = float(self.config.noise_to_initial_level)
+        skill_cfg = getattr(self.config, "skill_sampling", None)
+        overrides = getattr(skill_cfg, "init_obj_pos_noise", None) if skill_cfg else None
+        skill_label = motion_res.get("skill_label", None) if overrides else None
+        if not overrides or skill_label is None or len(overrides) == 0:
+            return base_scale * level
+        labels = skill_label[env_ids]
+        scales = torch.full((len(env_ids),), base_scale, device=self.device, dtype=torch.float32)
+        active = labels.sum(dim=-1) > 0.5
+        skill_ids = labels.argmax(dim=-1)
+        for k, v in overrides.items():
+            sid = int(k)
+            scales = torch.where(active & (skill_ids == sid), torch.full_like(scales, float(v)), scales)
+        return scales * level
+
     def _reset_object_states(self, env_ids): #wyh
         
         motion_times = (self.episode_length_buf) * self.dt + self.motion_start_times # next frames so +1
@@ -2375,7 +2441,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         motion_res = self._motion_lib.get_motion_state(self.motion_ids, motion_times, now_time, offset=offset)
         self._reset_support_asset_states(env_ids, motion_res)
 
-        obj_pos_noise = self.config.init_noise_scale.obj_pos * self.config.noise_to_initial_level
+        obj_pos_noise = self._get_init_obj_pos_noise(env_ids, motion_res)
         root_pos = motion_res['curr_obj_pos'][env_ids]# + 1
         root_rot = motion_res['curr_obj_rot'][env_ids]
         root_vel = motion_res['curr_obj_vel'][env_ids]
@@ -2555,7 +2621,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
                 self.simulator.robot_root_states[env_ids, 7:10] = root_vel + torch.randn_like(root_vel) * root_vel_noise
                 self.simulator.robot_root_states[env_ids, 10:13] = root_ang_vel + torch.randn_like(root_ang_vel) * root_ang_vel_noise
 
-            obj_pos_noise = self.config.init_noise_scale.obj_pos * self.config.noise_to_initial_level
+            obj_pos_noise = self._get_init_obj_pos_noise(env_ids, motion_res_obj)
             obj_root_pos = motion_res_obj['curr_obj_pos'][env_ids] 
             obj_root_rot = motion_res_obj['curr_obj_rot'][env_ids]
             obj_root_vel = motion_res_obj['curr_obj_vel'][env_ids]

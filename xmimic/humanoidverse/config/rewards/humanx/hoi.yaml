@@ -82,6 +82,22 @@ rewards:
     contact_graph: 0.05
     contact_graph_feet: 0.05
 
+  reward_tracking_sigma_curriculum:
+    enable: True
+    ema_beta: 0.99
+    level_down_threshold: 0.45   # raw reward EMA < 0.45 -> increase sigma (widen gradient capture range)
+    level_up_threshold: 0.70     # raw reward EMA > 0.70 -> decrease sigma (tighten tracking precision)
+    degree: 0.00025
+    sigmas:
+      ball_position:
+        initial: 0.10
+        min: 0.02
+        max: 0.15
+      ball_velocity:
+        initial: 0.15
+        min: 0.02
+        max: 0.25
+
 
 
   # locomotion_max_contact_force: 200.0

@@ -59,7 +59,11 @@ def support_top_to_world_center(
     return support_center
 
 
-def apply_xy_only_init_noise(base_pos: torch.Tensor, noise_scale: float) -> torch.Tensor:
-    noisy_pos = base_pos + torch.empty_like(base_pos).uniform_(-float(noise_scale), float(noise_scale))
+def apply_xy_only_init_noise(base_pos: torch.Tensor, noise_scale: float | torch.Tensor) -> torch.Tensor:
+    if isinstance(noise_scale, torch.Tensor):
+        scale = noise_scale.to(device=base_pos.device, dtype=base_pos.dtype).view(-1, 1)
+        noisy_pos = base_pos + (torch.rand_like(base_pos) * 2.0 - 1.0) * scale
+    else:
+        noisy_pos = base_pos + torch.empty_like(base_pos).uniform_(-float(noise_scale), float(noise_scale))
     noisy_pos[:, 2] = base_pos[:, 2]
     return noisy_pos

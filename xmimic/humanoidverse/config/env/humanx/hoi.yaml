@@ -82,6 +82,7 @@ env:
     skill_sampling:
       enabled: false
       weights: {}
+      init_obj_pos_noise: {}
 
     noise_to_initial_level: 1.0
     init_noise_scale: 

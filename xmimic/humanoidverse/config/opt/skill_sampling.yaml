@@ -16,3 +16,10 @@ env:
         "1": 0.55 # shoot
         "2": 0.15 # stand
         "3": 0.15 # stand to hold
+      # Optional per-skill override for init_noise_scale.obj_pos (multiplied by noise_to_initial_level).
+      # Unlisted skills fall back to init_noise_scale.obj_pos.
+      init_obj_pos_noise:
+        "0": 0.10 # hold
+        "1": 0.03 # shoot
+        "2": 0.10 # stand
+        "3": 0.10 # stand to hold
