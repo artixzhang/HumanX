@@ -313,6 +313,7 @@ class MotionLibRobotHOI(MotionLibBase):
         # Optional flag: 1 means freeze object in simulator (keep pose fixed).
         # Backward compatible: if not provided by data, it's all zeros.
         self.obj_freeze = torch.cat([m.obj_freeze for m in _obj_status], dim=0).long().to(self._device)
+        self.obj_push = torch.cat([m.obj_push for m in _obj_status], dim=0).bool().to(self._device)
         self.basket_pos = torch.cat([m.basket_pos for m in _obj_status], dim=0).float().to(self._device)
         self.skill_label = torch.cat([m.skill_label for m in _obj_status], dim=0).float().to(self._device)
         self._motion_need_support = torch.stack([m.need_support for m in _obj_status], dim=0).long().to(self._device)
@@ -922,6 +923,7 @@ class MotionLibRobotHOI(MotionLibBase):
         lfoot_contact_status = self.lfoot_contact[pf0l].squeeze(-1)
         rfoot_contact_status = self.rfoot_contact[pf0l].squeeze(-1)
         obj_freeze_status = self.obj_freeze[pf0l].squeeze(-1)
+        obj_push_status = self.obj_push[pf0l].squeeze(-1)
         human_joints_valid = self.human_joints_valid[pf0l].squeeze(-1)
         human_root_rot_valid = self.human_root_rot_valid[pf0l].squeeze(-1)
 
@@ -969,6 +971,7 @@ class MotionLibRobotHOI(MotionLibBase):
             "next_obj_rot": obj_rot,
             "ball_contact": obj_contact_status,
             "obj_freeze": obj_freeze_status,
+            "obj_push": obj_push_status,
             "lfoot_contact": lfoot_contact_status,
             "rfoot_contact": rfoot_contact_status,
             "human_joints": human_joints,
@@ -986,6 +989,22 @@ class MotionLibRobotHOI(MotionLibBase):
         })
         return return_dict
     
+
+    @classmethod
+    def _optional_obj_push_tensor(cls, curr_file, length):
+        """Load only obj_push: a binary scalar or (T,)/(T, 1) sequence, default False."""
+        try:
+            value = curr_file.get("obj_push", False)
+            tensor = value if torch.is_tensor(value) else torch.from_numpy(np.asarray(value))
+        except (TypeError, ValueError, RuntimeError) as exc:
+            raise ValueError("obj_push must contain boolean or 0/1 labels") from exc
+        if tensor.ndim != 0 and tuple(tensor.shape) not in ((length,), (length, 1)):
+            raise ValueError(f"obj_push must be scalar or have shape ({length},) or ({length}, 1)")
+        if not torch.all((tensor == 0) | (tensor == 1)):
+            raise ValueError("obj_push must contain boolean or 0/1 labels")
+        return cls._optional_sequence_tensor(
+            {"obj_push": tensor}, "obj_push", length, trailing_shape=(1,)
+        ).bool()
 
     def load_motion_with_skeleton(self,
                                   motion_data_list,
@@ -1067,6 +1086,8 @@ class MotionLibRobotHOI(MotionLibBase):
                 logger.warning(f"Skip motion {motion_id}: {exc}")
                 res.pop(f, None)
                 continue
+
+            obj_status["obj_push"] = self._optional_obj_push_tensor(curr_file, seq_len)[start:end]
 
             # Optional per-frame/per-motion freeze flag for the object.
             # Backward compatible: default all False.

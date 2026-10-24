@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import Mock, patch
 
 import numpy as np
 import torch
@@ -55,12 +56,13 @@ class MotionLoadPlanningTests(unittest.TestCase):
                 global_root_angular_velocity=torch.zeros(frames, 3),
                 global_angular_velocity=torch.zeros(frames, joints, 3),
                 global_velocity=torch.zeros(frames, joints, 3),
+                dof_pos=torch.zeros(frames, 1),
                 dof_vels=torch.zeros(frames, 1),
                 ref_origin_pos=torch.zeros(frames, 3),
                 ref_origin_rot=torch.zeros(frames, 4),
             )
 
-        def make_obj_status():
+        def make_obj_status(name):
             frames = 2
             return EasyDict(
                 obj_pos=torch.zeros(frames, 3),
@@ -71,6 +73,7 @@ class MotionLoadPlanningTests(unittest.TestCase):
                 obj_vel=torch.zeros(frames, 3),
                 obj_ang_vel=torch.zeros(frames, 3),
                 obj_freeze=torch.zeros(frames, 1, dtype=torch.long),
+                obj_push=torch.tensor([name == "b", name != "b"]).view(frames, 1),
                 basket_pos=torch.zeros(frames, 3),
                 skill_label=torch.zeros(frames, 32),
                 need_support=torch.zeros(1, dtype=torch.long),
@@ -88,7 +91,7 @@ class MotionLoadPlanningTests(unittest.TestCase):
         def fake_load_motion_with_skeleton(motion_data_list, fix_height, target_heading, max_len):
             load_batch_sizes.append(len(motion_data_list))
             return {
-                idx: (motion_data, make_motion(), make_obj_status())
+                idx: (motion_data, make_motion(), make_obj_status(motion_data["name"]))
                 for idx, motion_data in enumerate(motion_data_list)
             }
 
@@ -99,6 +102,66 @@ class MotionLoadPlanningTests(unittest.TestCase):
         self.assertEqual(load_batch_sizes, [3])
         self.assertEqual(motion_lib._num_motions, 6)
         self.assertEqual(motion_lib.gts.shape[0], 12)
+        self.assertEqual(motion_lib.obj_push.dtype, torch.bool)
+        self.assertEqual(
+            motion_lib.obj_push.squeeze(-1).tolist(),
+            [False, True, True, False, False, True] * 2,
+        )
+
+        # Labels use the floor frame at curr_time, including each motion's buffer offset;
+        # future reference times and interpolation must not enable a push early.
+        motion_ids = torch.tensor([0, 0, 0, 0, 1, 1, 2])
+        curr_time = torch.tensor([-0.01, 0.0, 0.019, 0.02, 0.0, 0.02, 0.1])
+        state = motion_lib.get_motion_state(motion_ids, torch.full((7,), 0.02), curr_time)
+        self.assertEqual(state["obj_push"].dtype, torch.bool)
+        self.assertEqual(state["obj_push"].tolist(), [False, False, False, True, True, False, True])
+
+    def test_obj_push_defaults_to_false_and_ignores_other_labels(self):
+        for data in ({}, {"push_available": True, "object_push": True}):
+            with self.subTest(data=data):
+                labels = MotionLibRobotHOI._optional_obj_push_tensor(data, 3)
+                self.assertEqual(labels.shape, (3, 1))
+                self.assertEqual(labels.dtype, torch.bool)
+                self.assertFalse(labels.any())
+
+    def test_obj_push_accepts_binary_scalars_and_frame_sequences(self):
+        for value in (True, False, 0, 1, np.bool_(True), np.asarray(1), torch.tensor(False)):
+            with self.subTest(value=value):
+                labels = MotionLibRobotHOI._optional_obj_push_tensor({"obj_push": value}, 3)
+                self.assertTrue(torch.equal(labels, torch.full((3, 1), bool(value))))
+        for value in ([0, 1, 0], np.array([[False], [True], [False]]), torch.tensor([0., 1., 0.])):
+            with self.subTest(value=value):
+                labels = MotionLibRobotHOI._optional_obj_push_tensor({"obj_push": value}, 3)
+                self.assertEqual(labels.dtype, torch.bool)
+                self.assertEqual(labels.tolist(), [[False], [True], [False]])
+
+    def test_obj_push_rejects_invalid_values_and_lengths(self):
+        for value in (None, "true", 2, -1, 0.5, np.nan, [0, 1], [1], [[0, 1, 0]], [[0], [1], [np.inf]]):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "obj_push"):
+                MotionLibRobotHOI._optional_obj_push_tensor({"obj_push": value}, 3)
+
+    def test_obj_push_is_cropped_once_with_robot_motion(self):
+        motion_lib = object.__new__(MotionLibRobotHOI)
+        motion_lib.skeleton_tree = EasyDict(node_names=["root", "joint"])
+        motion_lib.m_cfg = EasyDict()
+        motion_lib.has_action = False
+        motion_lib.mesh_parsers = Mock()
+        motion_lib.mesh_parsers.fk_batch.return_value = {}
+        frames = 5
+        motion = {
+            "root_trans_offset": np.zeros((frames, 3)),
+            "root_rot": np.tile([0., 0., 0., 1.], (frames, 1)),
+            "pose_aa": np.zeros((frames, 2, 3)),
+            "obj_pos": np.zeros((frames, 3)),
+            "obj_rot_quat": np.tile([0., 0., 0., 1.], (frames, 1)),
+            "contact": np.zeros((frames, 1)),
+            "obj_push": np.array([False, False, True, False, True]),
+            "fps": 50,
+        }
+        with patch("humanoidverse.utils.motion_lib.motion_lib_robot_HOI.random.randint", return_value=2):
+            loaded = motion_lib.load_motion_with_skeleton([motion], False, None, max_len=2)
+        self.assertEqual(loaded[0][1].normalized_pose_aa.shape[0], 2)
+        self.assertEqual(loaded[0][2].obj_push.tolist(), [[True], [False]])
 
 
 if __name__ == "__main__":

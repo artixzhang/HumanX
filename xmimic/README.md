@@ -115,6 +115,25 @@ python humanoidverse/train_agent.py \
   env.config.init_noise_scale.obj_pos=0.1
 ```
 
+Object velocity pushes are opt-in. Add these overrides to the training command:
+
+```bash
+domain_rand.object_push.enabled=true \
+domain_rand.object_push.rate_hz=1.0 \
+domain_rand.object_push.cooldown_s=0.5 \
+'domain_rand.object_push.max_delta_v_xyz=[0.1,0.1,0.05]'
+```
+
+Only the current reference frame's `obj_push` label permits a push; missing
+labels mean no pushes. Eligible control steps sample with probability
+`1 - exp(-rate_hz * dt)`, with a cooldown after each push. The three limits
+are symmetric world-frame velocity increments in m/s. Evaluation disables
+pushes by default; to enable them, add
+`++domain_rand.object_push.enabled=true` and
+`++domain_rand.object_push.apply_in_eval=true` to the evaluation command.
+Use `++` for additional object-push overrides when evaluating older checkpoints
+whose saved config lacks this block.
+
 Skill-based training proportions are opt-in. Add `+opt=skill_sampling` after
 `+exp=...` in the training command to load
 `humanoidverse/config/opt/skill_sampling.yaml`. It enables
@@ -317,6 +336,45 @@ python humanoidverse/eval_agent.py \
   export.policy=false \
   export.onnx=false
 ```
+
+## HumanX to BB Conversion
+
+Export HumanX motions to BB with one PKL per skill:
+
+```bash
+python tools/humanx_to_bb.py data/motions/setshot_1019/setshot_1019.pkl \
+  -o data/motions/setshot_1019_bb/
+```
+
+The directory contains `skill_0.pkl`, `skill_1.pkl`, etc., using the original
+zero-based `skill_label` indices. With `-o motions_bb.pkl`, a single skill uses
+that exact path; multiple skills use `motions_bb_skill_<ID>.pkl`. A file with one
+trajectory contains its fields directly (`root_pos`, `dof`, etc.), so BB's
+`motion_editor.py` can open it. A file with multiple trajectories contains a
+`list[dict]`, matching BB's viewer and batch tools. There is no outer motion-name
+dictionary. To edit a batch, first run the following command in the BB tools
+directory, then open one of the resulting single-motion files:
+
+```bash
+python manage_batch.py --split batch.pkl -o output_dir
+```
+
+Missing/all-zero labels go into `skill_unlabelled.pkl` when using a directory.
+Skill changes within a motion produce separate contiguous clips, with frame data sliced together and
+`stand_frame` rebased/clamped; disjoint segments are never concatenated.
+Even one/two-frame segments are retained, although the existing
+`bb_to_humanx.py` importer requires at least three frames per motion.
+
+The converter maps equivalent field names to BB, converts XYZW quaternions to
+WXYZ, and flattens `dof` to `(T,29)`. Existing push labels retain their values;
+`push_available`, `obj_push`, and an existing `release` become `(T,)` vectors
+(constant labels are broadcast). Missing `push_available` and `obj_push` become
+zero vectors. It removes
+`skill_label`, `pose_aa`/`pos_aa`, known FK caches, Euler object rotations and
+recomputable object velocities, while retaining unknown fields under their
+original keys. No raw-data backup is embedded. HumanX's merged hand contact is
+copied to both BB hand columns because the original left/right distinction is
+unavailable. Existing four-column contacts keep that distinction.
 
 ## XGen to XMimic Data Pipeline
 

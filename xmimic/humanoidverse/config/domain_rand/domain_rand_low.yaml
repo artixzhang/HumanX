@@ -14,6 +14,14 @@ domain_rand:
   max_push_vel_xyz : 0.5
   max_push_ang_vel_xyz: 0.52
 
+  # Only obj_push=True reference frames allow pushes; missing labels disable them.
+  object_push:
+    enabled: true
+    apply_in_eval: false
+    rate_hz: 1.0  # Rate per eligible second, not a percentage; step probability = 1 - exp(-rate_hz * dt).
+    cooldown_s: 0.5  # Minimum time between pushes; reset starts with no cooldown.
+    max_delta_v_xyz: [0.5, 0.5, 0.5]  # Symmetric world-frame velocity increments, m/s.
+
   # base com
   randomize_base_com : True
   base_com_range:

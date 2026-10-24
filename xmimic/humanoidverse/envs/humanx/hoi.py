@@ -3,6 +3,7 @@ import torch
 import numpy as np
 from pathlib import Path
 import os
+import math
 from humanoidverse.envs.legged_base_task.legged_robot_base import LeggedRobotBase
 from humanoidverse.utils.torch_utils import quat_rotate_inverse as torch_utils_quat_rotate_inverse
 from humanoidverse.utils.mimic_logging import (
@@ -136,6 +137,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         self._freeze_obj_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         # Store per-env frozen root state (13-dim). Only rows where _freeze_obj_buf=True are meaningful.
         self._frozen_obj_root_state = torch.zeros((self.num_envs, 13), device=self.device, dtype=torch.float32)
+        self._init_object_push()
         # Per-env reset-time state delay offsets (seconds). Used to intentionally misalign initial states.
         # Backward compatible: default zeros -> no effect unless enable_state_delay_init is True.
         self._state_delay_init_offset_s_robot = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
@@ -868,6 +870,54 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         super()._init_domain_rand_buffers()
         self.ref_episodic_offset = torch.zeros(self.num_envs, 3, dtype=torch.float, device=self.device, requires_grad=False)
 
+    def _init_object_push(self):
+        cfg = getattr(self.config.domain_rand, "object_push", None)
+        self._object_push_enabled = bool(getattr(cfg, "enabled", False))
+        if not self._object_push_enabled:
+            return
+
+        rate = float(getattr(cfg, "rate_hz", 1.0))
+        cooldown = float(getattr(cfg, "cooldown_s", 0.5))
+        max_delta_v = torch.as_tensor(
+            list(getattr(cfg, "max_delta_v_xyz", [0.1, 0.1, 0.05])),
+            device=self.device, dtype=self.simulator.object_root_state.dtype,
+        )
+        if not math.isfinite(rate) or rate < 0 or not math.isfinite(cooldown) or cooldown < 0:
+            raise ValueError("object_push rate_hz and cooldown_s must be finite and non-negative")
+        if max_delta_v.shape != (3,) or not torch.isfinite(max_delta_v).all() or (max_delta_v < 0).any():
+            raise ValueError("object_push max_delta_v_xyz must contain three finite, non-negative values")
+
+        self._object_push_probability = -math.expm1(-rate * self.dt)
+        self._object_push_cooldown_steps = math.ceil(cooldown / self.dt)
+        self._object_push_max_delta_v = max_delta_v
+        self._object_push_apply_in_eval = bool(getattr(cfg, "apply_in_eval", False))
+        # Integer episode steps avoid countdown drift; the first eligible step has no cooldown.
+        self._object_push_next_step = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+        self._object_push_allowed = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+
+    def _apply_object_push(self, reset_env_ids):
+        """Sample world-space ball velocity impulses inside the current obj_push window."""
+        if (not self._object_push_enabled or self._visualize_motion_data_only
+                or (self.is_evaluating and not self._object_push_apply_in_eval)
+                or self._object_push_probability == 0):
+            return
+
+        eligible = (self._object_push_allowed & ~self._freeze_obj_buf
+                    & (self.episode_length_buf > 0)
+                    & (self.episode_length_buf >= self._object_push_next_step))
+        eligible[reset_env_ids] = False
+        env_ids = eligible.nonzero(as_tuple=False).flatten()
+        if env_ids.numel() == 0:
+            return
+        env_ids = env_ids[torch.rand(env_ids.numel(), device=self.device) < self._object_push_probability]
+        if env_ids.numel() == 0:
+            return
+
+        delta_v = (2 * torch.rand((env_ids.numel(), 3), device=self.device) - 1) * self._object_push_max_delta_v
+        self.simulator.object_root_state[env_ids, 7:10] += delta_v
+        self._object_push_next_step[env_ids] = self.episode_length_buf[env_ids] + self._object_push_cooldown_steps
+        self.need_to_refresh_envs[env_ids] = True
+
     def _reset_tasks_callback(self, env_ids):
         if len(env_ids) == 0:
             return
@@ -893,6 +943,10 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
     def _reset_buffers_callback(self, env_ids, target_buf=None):
         # Let base class clear episode_length_buf, history, etc. first.
         super()._reset_buffers_callback(env_ids, target_buf)
+
+        if self._object_push_enabled:
+            self._object_push_next_step[env_ids] = 0
+            self._object_push_allowed[env_ids] = False
 
         # Reset offsets for these envs (avoid leaking previous episode's offsets).
         self._state_delay_init_offset_s_robot[env_ids] = 0.0
@@ -1261,6 +1315,8 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         now_time = self.episode_length_buf * self.dt + self.motion_start_times 
         # motion_res = self._get_state_from_motionlib_cache_trimesh(self.motion_ids, motion_times, offset= offset)
         motion_res = self._motion_lib.get_motion_state(self.motion_ids, motion_times, now_time, offset=offset)
+        if self._object_push_enabled:
+            self._object_push_allowed = motion_res["obj_push"] & ~motion_res["obj_freeze"].bool()
         #robot status
         ref_body_pos_extend = motion_res["rg_pos_t"]
         self.ref_body_pos_extend[:] = ref_body_pos_extend # for visualization and analysis
@@ -2191,6 +2247,8 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         # check terminations
         env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
         self.reset_envs_idx(env_ids)
+        # Perturb surviving envs after rewards, then submit and refresh their observations below.
+        self._apply_object_push(env_ids)
 
         # set envs
         refresh_env_ids = self.need_to_refresh_envs.nonzero(as_tuple=False).flatten()

@@ -25,7 +25,7 @@ rewards:
       # penalty_feet_contact_forces: -0.01
       # penalty_stumble: -10.0
 
-      ig_extended_hand: 5.0
+      ig_extended_hand: 2.0
       waist_dof: -50 #-100. #5.0
       hip_yaw_dof: -20 # for penalize hip yaw dof
       ball_position: 4.0 #3.0
