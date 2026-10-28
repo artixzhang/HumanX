@@ -19,9 +19,9 @@ domain_rand:
     enabled: true
     apply_in_eval: false
     rate_hz: 0.5  # Rate per eligible second, not a percentage; step probability = 1 - exp(-rate_hz * dt).
-    cooldown_s: 1.5  # Minimum time between pushes.
-    initial_delay_s: 1.0  # Default delay after reset before pushes can trigger.
-    max_delta_v_xyz: [0.3, 0.3, 0.3]  # Symmetric world-frame velocity increments, m/s.
+    cooldown_s: 2.0  # Minimum time between pushes.
+    initial_delay_s: 2.0  # Default delay after reset before pushes can trigger.
+    max_delta_v_xyz: [0.2, 0.2, 0.2]  # Symmetric world-frame velocity increments, m/s.
 
   # base com
   randomize_base_com : True

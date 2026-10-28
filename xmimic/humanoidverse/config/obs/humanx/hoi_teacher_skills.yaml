@@ -64,8 +64,8 @@ obs:
       "left_hand_link",
       "right_hand_link",
       # "torso_link",
-      # "left_ankle_roll_link",
-      # "right_ankle_roll_link",
+      "left_ankle_roll_link",
+      "right_ankle_roll_link",
     ]
     future_steps: [0, 1, 3, 6, 10, 15, 20, 25, 30]
     include_ball_contact: true

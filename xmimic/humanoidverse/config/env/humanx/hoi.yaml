@@ -85,6 +85,7 @@ env:
       init_noise_level: {}
       init_obj_pos_noise: {}
       init_obj_push_delay_s: {}
+      reward_overrides: {}
 
     noise_to_initial_level: 1.0
     init_noise_scale: 
@@ -95,7 +96,7 @@ env:
       root_rot_yaw: 0. # degree, * 3.14 / 180 (yaw-only, can coexist with root_rot)
       root_vel: 0.05
       root_ang_vel: 0.02
-      obj_pos: 0.04  # object position noise
+      obj_pos: 0.10  # object position noise
 
     use_teleop_control: False
     enforce_randomize_motion_start_eval: False

@@ -35,3 +35,20 @@ env:
       init_obj_push_delay_s:
         "0": 0.5 # hold
         "1": 0.5 # shoot
+      # Optional per-skill reward scale and tracking sigma overrides (keyed by skill ID).
+      # A tracking sigma can be a single float or a multi-scale list (e.g. [0.02, 0.10] for dual-kernel).
+      # Unlisted skills or reward names fall back to the global reward_scales and reward_tracking_sigma.
+      reward_overrides:
+        "0": # hold (ball position uses dual-kernel for recovery + precision; velocity tracking disabled)
+          reward_scales:
+            ball_position: 4.0
+            ball_velocity: 0.0
+          reward_tracking_sigma:
+            ball_position: [0.02, 0.10]
+        "1": # shoot (dual-kernel [fine, coarse] provides wide capture funnel + sharp release precision)
+          reward_scales:
+            ball_position: 4.0
+            ball_velocity: 2.0
+          reward_tracking_sigma:
+            ball_position: [0.02, 0.10]
+            ball_velocity: [0.02, 0.15]

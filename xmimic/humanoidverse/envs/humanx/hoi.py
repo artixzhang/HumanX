@@ -278,7 +278,10 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
     def _init_skill_reward_overrides(self):
         self._skill_scale_overrides = {}
         self._skill_sigma_overrides = {}
-        overrides_cfg = getattr(self.config.rewards, "skill_reward_overrides", None)
+        skill_cfg = getattr(self.config, "skill_sampling", None)
+        overrides_cfg = getattr(skill_cfg, "reward_overrides", None) if skill_cfg else None
+        if not overrides_cfg:
+            overrides_cfg = getattr(self.config.rewards, "skill_reward_overrides", None)
         if not overrides_cfg:
             return
         for sk_key in list(getattr(overrides_cfg, "keys", lambda: [])()):

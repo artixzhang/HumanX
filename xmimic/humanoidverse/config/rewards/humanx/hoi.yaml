@@ -10,13 +10,13 @@ rewards:
   # if False, ignore yaw (rotation about world Z) when computing ball_rotation reward
   ball_rotation_consider_yaw: True
   reward_scales:
-      teleop_body_position_extend: 1.5
+      teleop_body_position_extend: 1.0
       teleop_vr_3point: 1.6
       teleop_body_position_feet: 2.1
-      teleop_body_rotation_extend: 1.0
+      teleop_body_rotation_extend: 0.5
       teleop_body_ang_velocity_extend: 0.5
       teleop_body_velocity_extend: 1.0
-      teleop_joint_position: 1.5
+      teleop_joint_position: 1.0
       teleop_joint_velocity: 0.5
       penalty_torques: -0.00001
       # penalty_dof_vel: -0.0001
@@ -74,31 +74,17 @@ rewards:
     ig_extended_hand: 0.02
     waist_dof: 0.05
     hip_yaw_dof: 0.05
-    ball_position: 0.02
+    ball_position: [0.02, 0.05]
     ball_rotation: 0.05
-    ball_velocity: 0.05
+    ball_velocity: [0.02, 0.05]
     ball_spin_axis_alignment: 0.2
     interaction_graph: 0.05
     contact_graph: 0.05
     contact_graph_feet: 0.05
 
-  # Per-skill reward scale and tracking sigma overrides (keyed by skill ID).
-  # A tracking sigma can be a single float or a multi-scale list (e.g. [0.02, 0.15] for dual-kernel).
-  # Unlisted skills or reward names fall back to the global reward_scales and reward_tracking_sigma above.
-  skill_reward_overrides:
-    "0": # hold (ball position uses dual-kernel for recovery + precision; velocity tracking disabled)
-      reward_scales:
-        ball_position: 4.0
-        ball_velocity: 0.0
-      reward_tracking_sigma:
-        ball_position: [0.02, 0.10]
-    "1": # shoot (dual-kernel [fine, coarse] provides wide capture funnel + sharp release precision)
-      reward_scales:
-        ball_position: 4.0
-        ball_velocity: 2.0
-      reward_tracking_sigma:
-        ball_position: [0.02, 0.10]
-        ball_velocity: [0.02, 0.15]
+  # Per-skill reward scale and tracking sigma overrides are configured via
+  # +opt=skill_sampling (env.config.skill_sampling.reward_overrides).
+  skill_reward_overrides: {}
 
 
 
@@ -111,7 +97,7 @@ rewards:
   reward_max_penalty_scale: 1.0
   reward_penalty_level_down_threshold: 20
   reward_penalty_level_up_threshold: 22 # shortest motion in TairanTestbed is 92, therefore 46 is the middle point, we set 42 here for curriculum learning level up
-  reward_penalty_degree: 0.00002 # 0.00001
+  reward_penalty_degree: 0.00001 # 0.00001
   num_compute_average_epl: 10000
 
   reward_limit:
