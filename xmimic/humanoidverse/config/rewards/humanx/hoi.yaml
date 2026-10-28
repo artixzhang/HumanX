@@ -30,7 +30,7 @@ rewards:
       hip_yaw_dof: -20 # for penalize hip yaw dof
       ball_position: 4.0 #3.0
       ball_rotation: 0.0
-      ball_velocity: 2.0
+      ball_velocity: 1.0
       ball_spin_axis_alignment: 0.0
       penalty_ball_spin_axis_alignment: 0.0
       interaction_graph: 2.0 #1.0
@@ -76,27 +76,29 @@ rewards:
     hip_yaw_dof: 0.05
     ball_position: 0.02
     ball_rotation: 0.05
-    ball_velocity: 0.02
+    ball_velocity: 0.05
     ball_spin_axis_alignment: 0.2
     interaction_graph: 0.05
     contact_graph: 0.05
     contact_graph_feet: 0.05
 
-  reward_tracking_sigma_curriculum:
-    enable: True
-    ema_beta: 0.99
-    level_down_threshold: 0.45   # raw reward EMA < 0.45 -> increase sigma (widen gradient capture range)
-    level_up_threshold: 0.70     # raw reward EMA > 0.70 -> decrease sigma (tighten tracking precision)
-    degree: 0.00025
-    sigmas:
-      ball_position:
-        initial: 0.10
-        min: 0.02
-        max: 0.15
-      ball_velocity:
-        initial: 0.15
-        min: 0.02
-        max: 0.25
+  # Per-skill reward scale and tracking sigma overrides (keyed by skill ID).
+  # A tracking sigma can be a single float or a multi-scale list (e.g. [0.02, 0.15] for dual-kernel).
+  # Unlisted skills or reward names fall back to the global reward_scales and reward_tracking_sigma above.
+  skill_reward_overrides:
+    "0": # hold (ball position uses dual-kernel for recovery + precision; velocity tracking disabled)
+      reward_scales:
+        ball_position: 4.0
+        ball_velocity: 0.0
+      reward_tracking_sigma:
+        ball_position: [0.02, 0.10]
+    "1": # shoot (dual-kernel [fine, coarse] provides wide capture funnel + sharp release precision)
+      reward_scales:
+        ball_position: 4.0
+        ball_velocity: 2.0
+      reward_tracking_sigma:
+        ball_position: [0.02, 0.10]
+        ball_velocity: [0.02, 0.15]
 
 
 

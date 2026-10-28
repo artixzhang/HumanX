@@ -264,44 +264,86 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             except Exception:
                 pass
         self._bm_end_effector_body_indices = bm_ee_indices
-        self._init_reward_tracking_sigma_curriculum()
+        self._init_skill_reward_overrides()
 
-    def _init_reward_tracking_sigma_curriculum(self):
-        cfg = getattr(self.config.rewards, "reward_tracking_sigma_curriculum", None)
-        self._use_sigma_curriculum = bool(cfg and getattr(cfg, "enable", False))
-        self._sigma_curriculum_ema = {}
-        self._sigma_curriculum_bounds = {}
-        if not self._use_sigma_curriculum:
-            return
-        self._sigma_curriculum_beta = float(getattr(cfg, "ema_beta", 0.99))
-        self._sigma_curriculum_down_th = float(getattr(cfg, "level_down_threshold", 0.45))
-        self._sigma_curriculum_up_th = float(getattr(cfg, "level_up_threshold", 0.70))
-        self._sigma_curriculum_degree = float(getattr(cfg, "degree", 0.00025))
-        sigmas_cfg = getattr(cfg, "sigmas", {})
-        for name in list(getattr(sigmas_cfg, "keys", lambda: [])()):
-            item = sigmas_cfg[name]
-            init_val = float(getattr(item, "initial", getattr(self.config.rewards.reward_tracking_sigma, name)))
-            min_val = float(getattr(item, "min", init_val))
-            max_val = float(getattr(item, "max", init_val))
-            setattr(self.config.rewards.reward_tracking_sigma, name, init_val)
-            self._sigma_curriculum_bounds[name] = (min_val, max_val)
-            logger.info(f"Sigma curriculum [{name}]: initial={init_val}, min={min_val}, max={max_val}")
+    @staticmethod
+    def _parse_sigma_spec(raw_val):
+        if isinstance(raw_val, (int, float)):
+            return (float(raw_val),)
+        vals = tuple(float(x) for x in raw_val)
+        if not vals:
+            raise ValueError("reward_tracking_sigma entry cannot be empty")
+        return vals
 
-    def _update_reward_tracking_sigma_curriculum(self):
-        if not self._use_sigma_curriculum or getattr(self, "is_evaluating", False):
+    def _init_skill_reward_overrides(self):
+        self._skill_scale_overrides = {}
+        self._skill_sigma_overrides = {}
+        overrides_cfg = getattr(self.config.rewards, "skill_reward_overrides", None)
+        if not overrides_cfg:
             return
-        deg = self._sigma_curriculum_degree
-        for name, (min_val, max_val) in self._sigma_curriculum_bounds.items():
-            ema = self._sigma_curriculum_ema.get(name, None)
-            if ema is None:
-                continue
-            sigma = float(getattr(self.config.rewards.reward_tracking_sigma, name))
-            if ema < self._sigma_curriculum_down_th:
-                sigma *= (1.0 + deg)
-            elif ema > self._sigma_curriculum_up_th:
-                sigma *= (1.0 - deg)
-            sigma = float(np.clip(sigma, min_val, max_val))
-            setattr(self.config.rewards.reward_tracking_sigma, name, sigma)
+        for sk_key in list(getattr(overrides_cfg, "keys", lambda: [])()):
+            sid = int(sk_key)
+            scfg = overrides_cfg[sk_key]
+            # 1) Per-skill reward scale overrides (multiplied by self.dt to match self.reward_scales)
+            scales_cfg = getattr(scfg, "reward_scales", None)
+            if scales_cfg:
+                for rname in list(getattr(scales_cfg, "keys", lambda: [])()):
+                    scaled = float(scales_cfg[rname]) * self.dt
+                    self._skill_scale_overrides.setdefault(rname, {})[sid] = scaled
+                    if rname not in self.reward_scales and scaled != 0.0:
+                        self.reward_scales[rname] = 0.0
+                        if rname != "termination" and rname not in self.reward_names:
+                            self.reward_names.append(rname)
+                            self.reward_functions.append(getattr(self, "_reward_" + rname))
+                        if rname not in self.episode_sums:
+                            self.episode_sums[rname] = torch.zeros(
+                                self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
+                            )
+            # 2) Per-skill tracking sigma overrides (single float or multi-kernel list)
+            sigmas_cfg = getattr(scfg, "reward_tracking_sigma", None)
+            if sigmas_cfg:
+                for sname in list(getattr(sigmas_cfg, "keys", lambda: [])()):
+                    self._skill_sigma_overrides.setdefault(sname, {})[sid] = self._parse_sigma_spec(sigmas_cfg[sname])
+
+    def _get_active_skill_ids(self):
+        lbl = getattr(self, "skill_label", None)
+        if lbl is None or lbl.ndim != 2 or lbl.shape[1] == 0:
+            return None, None
+        return lbl.sum(dim=-1) > 0.5, lbl.argmax(dim=-1)
+
+    @staticmethod
+    def _eval_sigma_spec(err: torch.Tensor, spec) -> torch.Tensor:
+        if len(spec) == 1:
+            return torch.exp(-err / spec[0])
+        return sum(torch.exp(-err / s) for s in spec) / len(spec)
+
+    def _exp_tracking_reward(self, err: torch.Tensor, name: str) -> torch.Tensor:
+        base_spec = self._parse_sigma_spec(getattr(self.config.rewards.reward_tracking_sigma, name))
+        overrides = getattr(self, "_skill_sigma_overrides", {}).get(name, None)
+        if not overrides:
+            return self._eval_sigma_spec(err, base_spec)
+        active, sids = self._get_active_skill_ids()
+        if active is None:
+            return self._eval_sigma_spec(err, base_spec)
+        rew = self._eval_sigma_spec(err, base_spec)
+        for sid, spec in overrides.items():
+            mask = active & (sids == sid)
+            if torch.any(mask):
+                rew = torch.where(mask, self._eval_sigma_spec(err, spec), rew)
+        return rew
+
+    def _get_reward_scale(self, name: str):
+        base = self.reward_scales[name]
+        overrides = getattr(self, "_skill_scale_overrides", {}).get(name, None)
+        if not overrides:
+            return base
+        active, sids = self._get_active_skill_ids()
+        if active is None:
+            return base
+        scale = torch.full((self.num_envs,), float(base), device=self.device, dtype=torch.float32)
+        for sid, val in overrides.items():
+            scale = torch.where(active & (sids == sid), torch.full_like(scale, float(val)), scale)
+        return scale
 
     def _sample_visualization_motion_state(self):
         motion_time = self.episode_length_buf * self.dt + self.motion_start_times
@@ -916,22 +958,50 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
 
         rate = float(getattr(cfg, "rate_hz", 1.0))
         cooldown = float(getattr(cfg, "cooldown_s", 0.5))
+        initial_delay = float(getattr(cfg, "initial_delay_s", 0.0))
         max_delta_v = torch.as_tensor(
             list(getattr(cfg, "max_delta_v_xyz", [0.1, 0.1, 0.05])),
             device=self.device, dtype=self.simulator.object_root_state.dtype,
         )
         if not math.isfinite(rate) or rate < 0 or not math.isfinite(cooldown) or cooldown < 0:
             raise ValueError("object_push rate_hz and cooldown_s must be finite and non-negative")
+        if not math.isfinite(initial_delay) or initial_delay < 0:
+            raise ValueError("object_push initial_delay_s must be finite and non-negative")
         if max_delta_v.shape != (3,) or not torch.isfinite(max_delta_v).all() or (max_delta_v < 0).any():
             raise ValueError("object_push max_delta_v_xyz must contain three finite, non-negative values")
 
         self._object_push_probability = -math.expm1(-rate * self.dt)
         self._object_push_cooldown_steps = math.ceil(cooldown / self.dt)
+        self._object_push_init_delay_steps = math.ceil(initial_delay / self.dt)
+        self._object_push_skill_init_delay_steps = {}
+        raw_overrides = getattr(getattr(self.config, "skill_sampling", None), "init_obj_push_delay_s", None)
+        if raw_overrides:
+            for k, v in raw_overrides.items():
+                delay_s = float(v)
+                if not math.isfinite(delay_s) or delay_s < 0:
+                    raise ValueError(f"object_push skill initial delay for skill {k} must be finite and non-negative")
+                self._object_push_skill_init_delay_steps[int(k)] = math.ceil(delay_s / self.dt)
         self._object_push_max_delta_v = max_delta_v
         self._object_push_apply_in_eval = bool(getattr(cfg, "apply_in_eval", False))
-        # Integer episode steps avoid countdown drift; the first eligible step has no cooldown.
-        self._object_push_next_step = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+        # Integer episode steps avoid countdown drift; reset initializes to initial_delay_s.
+        self._object_push_next_step = torch.full(
+            (self.num_envs,), self._object_push_init_delay_steps, device=self.device, dtype=torch.long
+        )
         self._object_push_allowed = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+
+    def _get_object_push_init_delay_steps(self, env_ids, motion_res=None):
+        steps = torch.full((len(env_ids),), self._object_push_init_delay_steps, device=self.device, dtype=torch.long)
+        if not self._object_push_skill_init_delay_steps:
+            return steps
+        skill_label = motion_res.get("skill_label", None) if motion_res is not None else None
+        if skill_label is None:
+            return steps
+        labels = skill_label[env_ids]
+        active = labels.sum(dim=-1) > 0.5
+        skill_ids = labels.argmax(dim=-1)
+        for sid, d_steps in self._object_push_skill_init_delay_steps.items():
+            steps = torch.where(active & (skill_ids == sid), torch.full_like(steps, d_steps), steps)
+        return steps
 
     def _apply_object_push(self, reset_env_ids):
         """Sample world-space ball velocity impulses inside the current obj_push window."""
@@ -969,8 +1039,6 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             self._update_terminate_when_motion_far_curriculum()
         if self.config.termination.terminate_when_ball_status_far and self.config.termination_curriculum.terminate_when_ball_status_far_curriculum:
             self._update_terminate_when_ball_status_far_curriculum()
-        if getattr(self, "_use_sigma_curriculum", False):
-            self._update_reward_tracking_sigma_curriculum()
 
         # reset packet loss state for reset envs
         if self._packet_loss_enabled:
@@ -985,7 +1053,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         super()._reset_buffers_callback(env_ids, target_buf)
 
         if self._object_push_enabled:
-            self._object_push_next_step[env_ids] = 0
+            self._object_push_next_step[env_ids] = self._object_push_init_delay_steps
             self._object_push_allowed[env_ids] = False
 
         # Reset offsets for these envs (avoid leaking previous episode's offsets).
@@ -1788,14 +1856,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         
         for i in range(len(self.reward_functions)):
             name = self.reward_names[i]
-            raw_rew = self.reward_functions[i]()
-            if getattr(self, "_use_sigma_curriculum", False) and name in self._sigma_curriculum_bounds and has_window:
-                step_mean = raw_rew[window_mask].mean().item()
-                prev = self._sigma_curriculum_ema.get(name, None)
-                self._sigma_curriculum_ema[name] = (
-                    step_mean if prev is None else self._sigma_curriculum_beta * prev + (1.0 - self._sigma_curriculum_beta) * step_mean
-                )
-            rew = raw_rew * self.reward_scales[name]
+            rew = self.reward_functions[i]() * self._get_reward_scale(name)
             try:
                 assert rew.shape[0] == self.num_envs
             except:
@@ -1813,7 +1874,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             self.rew_buf[:] = torch.clip(self.rew_buf[:], min=0.)
         # add termination reward after clipping
         if "termination" in self.reward_scales:
-            rew = self._reward_termination() * self.reward_scales["termination"]
+            rew = self._reward_termination() * self._get_reward_scale("termination")
             self.rew_buf += rew
             self.episode_sums["termination"] += rew
 
@@ -1843,11 +1904,6 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             self.log_dict["soft_dof_vel_curriculum_value"] = torch.tensor(self.soft_dof_vel_curriculum_value, dtype=torch.float)
         if self.use_reward_limits_torque_curriculum:
             self.log_dict["soft_torque_curriculum_value"] = torch.tensor(self.soft_torque_curriculum_value, dtype=torch.float)
-        if getattr(self, "_use_sigma_curriculum", False):
-            for name in self._sigma_curriculum_bounds:
-                self.log_dict[f"sigma_{name}"] = torch.tensor(
-                    float(getattr(self.config.rewards.reward_tracking_sigma, name)), dtype=torch.float
-                )
         
         if self.add_noise_currculum:
             self.log_dict["current_noise_curriculum_value"] = torch.tensor(self.current_noise_curriculum_value, dtype=torch.float)
@@ -2416,9 +2472,27 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         else:
             self._reset_object_states(env_ids)
             
+    def _get_init_noise_level(self, env_ids, motion_res):
+        base_level = float(self.config.noise_to_initial_level)
+        if base_level == 0.0:
+            return 0.0
+        skill_cfg = getattr(self.config, "skill_sampling", None)
+        overrides = getattr(skill_cfg, "init_noise_level", None) if skill_cfg else None
+        skill_label = motion_res.get("skill_label", None) if overrides else None
+        if not overrides or skill_label is None or len(overrides) == 0:
+            return base_level
+        labels = skill_label[env_ids]
+        levels = torch.full((len(env_ids),), base_level, device=self.device, dtype=torch.float32)
+        active = labels.sum(dim=-1) > 0.5
+        skill_ids = labels.argmax(dim=-1)
+        for k, v in overrides.items():
+            sid = int(k)
+            levels = torch.where(active & (skill_ids == sid), torch.full_like(levels, float(v)), levels)
+        return levels
+
     def _get_init_obj_pos_noise(self, env_ids, motion_res):
         base_scale = float(self.config.init_noise_scale.obj_pos)
-        level = float(self.config.noise_to_initial_level)
+        level = self._get_init_noise_level(env_ids, motion_res)
         skill_cfg = getattr(self.config, "skill_sampling", None)
         overrides = getattr(skill_cfg, "init_obj_pos_noise", None) if skill_cfg else None
         skill_label = motion_res.get("skill_label", None) if overrides else None
@@ -2442,6 +2516,8 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         self._reset_support_asset_states(env_ids, motion_res)
 
         obj_pos_noise = self._get_init_obj_pos_noise(env_ids, motion_res)
+        if self._object_push_enabled:
+            self._object_push_next_step[env_ids] = self._get_object_push_init_delay_steps(env_ids, motion_res)
         root_pos = motion_res['curr_obj_pos'][env_ids]# + 1
         root_rot = motion_res['curr_obj_rot'][env_ids]
         root_vel = motion_res['curr_obj_vel'][env_ids]
@@ -2543,12 +2619,15 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             self._reset_support_asset_states(env_ids, motion_res_obj)
 
             #robot
-            root_pos_noise = self.config.init_noise_scale.root_pos * self.config.noise_to_initial_level
-            root_rot_noise = self.config.init_noise_scale.root_rot * 3.14 / 180 * self.config.noise_to_initial_level
+            noise_level = self._get_init_noise_level(env_ids, motion_res_robot)
+            if isinstance(noise_level, torch.Tensor):
+                noise_level = noise_level.unsqueeze(-1)
+            root_pos_noise = self.config.init_noise_scale.root_pos * noise_level
+            root_rot_noise = self.config.init_noise_scale.root_rot * 3.14 / 180 * noise_level
             # optional: yaw-only init noise (degree in config, converted to rad here). Keep backward compatible.
-            root_rot_yaw_noise = getattr(self.config.init_noise_scale, "root_rot_yaw", 0.0) * 3.14 / 180 * self.config.noise_to_initial_level
-            root_vel_noise = self.config.init_noise_scale.root_vel * self.config.noise_to_initial_level
-            root_ang_vel_noise = self.config.init_noise_scale.root_ang_vel * self.config.noise_to_initial_level
+            root_rot_yaw_noise = getattr(self.config.init_noise_scale, "root_rot_yaw", 0.0) * 3.14 / 180 * noise_level
+            root_vel_noise = self.config.init_noise_scale.root_vel * noise_level
+            root_ang_vel_noise = self.config.init_noise_scale.root_ang_vel * noise_level
 
             root_pos = motion_res_robot['root_pos'][env_ids]
             root_rot = motion_res_robot['root_rot'][env_ids]
@@ -2566,9 +2645,9 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
 
             # apply rotation noises (root_rot: full 3D small rotation; root_rot_yaw: yaw-only), both can coexist
             noisy_root_rot = root_rot
-            if root_rot_noise != 0.0:
+            if float(self.config.init_noise_scale.root_rot) != 0.0:
                 noisy_root_rot = quat_mul(self.small_random_quaternions(root_rot.shape[0], root_rot_noise), noisy_root_rot, w_last=True)
-            if root_rot_yaw_noise != 0.0:
+            if float(getattr(self.config.init_noise_scale, "root_rot_yaw", 0.0)) != 0.0:
                 noisy_root_rot = quat_mul(self.small_random_yaw_quaternions(root_rot.shape[0], root_rot_yaw_noise), noisy_root_rot, w_last=True)
             yaw_offset_deg = float(getattr(self.config, "init_root_yaw_offset_deg", 0.0) or 0.0)
             if yaw_offset_deg != 0.0:
@@ -2622,6 +2701,8 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
                 self.simulator.robot_root_states[env_ids, 10:13] = root_ang_vel + torch.randn_like(root_ang_vel) * root_ang_vel_noise
 
             obj_pos_noise = self._get_init_obj_pos_noise(env_ids, motion_res_obj)
+            if self._object_push_enabled:
+                self._object_push_next_step[env_ids] = self._get_object_push_init_delay_steps(env_ids, motion_res_obj)
             obj_root_pos = motion_res_obj['curr_obj_pos'][env_ids] 
             obj_root_rot = motion_res_obj['curr_obj_rot'][env_ids]
             obj_root_vel = motion_res_obj['curr_obj_vel'][env_ids]
@@ -2735,8 +2816,11 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         now_time[env_ids] = torch.clamp(now_time[env_ids] - off_r, min=0.0)
         motion_res = self._motion_lib.get_motion_state(self.motion_ids, motion_times, now_time, offset=offset)
 
-        dof_pos_noise = self.config.init_noise_scale.dof_pos * self.config.noise_to_initial_level
-        dof_vel_noise = self.config.init_noise_scale.dof_vel * self.config.noise_to_initial_level
+        noise_level = self._get_init_noise_level(env_ids, motion_res)
+        if isinstance(noise_level, torch.Tensor):
+            noise_level = noise_level.unsqueeze(-1)
+        dof_pos_noise = self.config.init_noise_scale.dof_pos * noise_level
+        dof_vel_noise = self.config.init_noise_scale.dof_vel * noise_level
         dof_pos = motion_res['dof_pos'][env_ids]
         dof_vel = motion_res['dof_vel'][env_ids]
         self.simulator.dof_pos[env_ids] = dof_pos + torch.randn_like(dof_pos) * dof_pos_noise #* 10 #wyh
@@ -3440,10 +3524,8 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         return r_joint_vel
     
     def _reward_ball_position(self):
-
         ball_pos_diff = (self.dif_global_ball_pos**2).mean(dim=-1)
-        ball_pos_diff_rew = torch.exp(-ball_pos_diff / self.config.rewards.reward_tracking_sigma.ball_position)
-        return ball_pos_diff_rew
+        return self._exp_tracking_reward(ball_pos_diff, "ball_position")
     
     def _remove_yaw_from_rel_quat(self, q_rel: torch.Tensor) -> torch.Tensor:
         """
@@ -3463,14 +3545,12 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         consider_yaw = getattr(self.config.rewards, "ball_rotation_consider_yaw", True)
         ball_rot_diff = self.dif_global_ball_rot if consider_yaw else self._remove_yaw_from_rel_quat(self.dif_global_ball_rot)
         diff_ball_rot_dist = quaternion_angle_squared(ball_rot_diff)
-        r_ball_rot = torch.exp(-diff_ball_rot_dist / self.config.rewards.reward_tracking_sigma.ball_rotation)
-        return r_ball_rot
+        return self._exp_tracking_reward(diff_ball_rot_dist, "ball_rotation")
     
     def _reward_ball_velocity(self):
         ball_vel_diff = self.dif_global_ball_vel
         diff_ball_vel_dist = (ball_vel_diff**2).mean(dim=-1)
-        r_ball_vel = torch.exp(-diff_ball_vel_dist / self.config.rewards.reward_tracking_sigma.ball_velocity)
-        return r_ball_vel
+        return self._exp_tracking_reward(diff_ball_vel_dist, "ball_velocity")
 
     def _reward_penalty_ball_spin_axis_alignment(self):
         """
@@ -3583,37 +3663,22 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         return reward
     
     def _reward_interaction_graph(self):
-
         e_ig = (self.dif_ig**2).mean(dim=-1).mean(dim=-1)
-        ig_rew = torch.exp(-e_ig / self.config.rewards.reward_tracking_sigma.interaction_graph)
-        
-        return ig_rew
+        return self._exp_tracking_reward(e_ig, "interaction_graph")
     
     def _reward_contact_graph(self):
-
-        # e_cg_bodies = torch.abs(self.bodies_contact_status)
-        e_cg_no_bodies = torch.abs(self.no_bodies_contact_status)
-        e_cg_no_bodies = torch.exp(-(e_cg_no_bodies) / self.config.rewards.reward_tracking_sigma.contact_graph)
-        e_cg_obj = torch.abs(self.object_contact_status)
-        e_cg_obj = torch.exp(-(e_cg_obj) / self.config.rewards.reward_tracking_sigma.contact_graph)
-        
-        cg_rew = e_cg_no_bodies * e_cg_obj
-
-        return cg_rew
+        e_cg_no_bodies = self._exp_tracking_reward(torch.abs(self.no_bodies_contact_status), "contact_graph")
+        e_cg_obj = self._exp_tracking_reward(torch.abs(self.object_contact_status), "contact_graph")
+        return e_cg_no_bodies * e_cg_obj
 
     def _reward_contact_graph_feet(self):
-   
-        e_lfoot_contact = torch.abs(self.lfoot_contact_status)
-        lfoot_cg_rew = torch.exp(-(e_lfoot_contact) / self.config.rewards.reward_tracking_sigma.contact_graph_feet)
-        e_rfoot_contact = torch.abs(self.rfoot_contact_status)
-        rfoot_cg_rew = torch.exp(-(e_rfoot_contact) / self.config.rewards.reward_tracking_sigma.contact_graph_feet)
+        lfoot_cg_rew = self._exp_tracking_reward(torch.abs(self.lfoot_contact_status), "contact_graph_feet")
+        rfoot_cg_rew = self._exp_tracking_reward(torch.abs(self.rfoot_contact_status), "contact_graph_feet")
         return lfoot_cg_rew * rfoot_cg_rew
 
     def _reward_ig_extended_hand(self):
         e_ig = (self.dif_ig_extended_hand**2).mean(dim=-1).mean(dim=-1)
-        ig_rew = torch.exp(-e_ig / self.config.rewards.reward_tracking_sigma.ig_extended_hand)
-        
-        return ig_rew
+        return self._exp_tracking_reward(e_ig, "ig_extended_hand")
     
     # def _reward_waist_dof(self):
 

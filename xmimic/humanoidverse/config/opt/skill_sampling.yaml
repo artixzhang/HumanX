@@ -16,10 +16,22 @@ env:
         "1": 0.55 # shoot
         "2": 0.15 # stand
         "3": 0.15 # stand to hold
-      # Optional per-skill override for init_noise_scale.obj_pos (multiplied by noise_to_initial_level).
+      # Optional per-skill override for noise_to_initial_level (scales robot dof/root init noise).
+      # Unlisted skills fall back to noise_to_initial_level.
+      init_noise_level:
+        "0": 1.0 # hold
+        "1": 0.5 # shoot (reduced robot pose randomization while preserving stance variation)
+        "2": 1.0 # stand
+        "3": 1.0 # stand to hold
+      # Optional per-skill override for init_noise_scale.obj_pos (multiplied by skill init_noise_level).
       # Unlisted skills fall back to init_noise_scale.obj_pos.
       init_obj_pos_noise:
         "0": 0.10 # hold
-        "1": 0.03 # shoot
-        "2": 0.10 # stand
-        "3": 0.10 # stand to hold
+        "1": 0.0 # shoot
+        "2": 0.0 # stand
+        "3": 0.0 # stand to hold
+      # Optional per-skill override for domain_rand.object_push.initial_delay_s (seconds).
+      # Unlisted skills fall back to domain_rand.object_push.initial_delay_s.
+      init_obj_push_delay_s:
+        "0": 0.5 # hold
+        "1": 0.5 # shoot
