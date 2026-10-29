@@ -258,7 +258,7 @@ robot:
     xml_file: "g1/${robot.asset.robot_type}_mode16_bb.xml"
     robot_type: g1_29dof
     self_collisions: 0 # 1 to disable, 0 to enable self collisions
-    # Preserve the 112 exported convex parts in each hand OBJ.
+    # Preserve the 32 exported convex parts in each hand OBJ.
     convex_decomposition_from_submeshes: True
     default_dof_drive_mode: 3
 
