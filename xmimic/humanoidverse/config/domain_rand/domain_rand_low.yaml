@@ -16,7 +16,7 @@ domain_rand:
 
   # Only obj_push=True reference frames allow pushes; missing labels disable them.
   object_push:
-    enabled: true
+    enabled: False
     apply_in_eval: false
     rate_hz: 0.5  # Rate per eligible second, not a percentage; step probability = 1 - exp(-rate_hz * dt).
     cooldown_s: 2.0  # Minimum time between pushes.
