@@ -783,10 +783,196 @@
       </geometry>
       <material name="white"/>
     </visual>
-    <collision name="left_bowl_convex_compound">
+    <collision name="left_bowl_hull_000">
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/bowl_convex/left_compound.obj" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/bowl_convex/left/hull_000.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_001">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_001.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_002">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_002.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_003">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_003.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_004">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_004.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_005">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_005.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_006">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_006.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_007">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_007.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_008">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_008.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_009">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_009.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_010">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_010.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_011">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_011.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_012">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_012.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_013">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_013.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_014">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_014.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_015">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_015.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_016">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_016.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_017">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_017.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_018">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_018.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_019">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_019.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_020">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_020.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_021">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_021.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_022">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_022.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_023">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_023.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_024">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_024.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_025">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_025.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_026">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_026.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_027">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_027.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_028">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_028.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_029">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_029.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_030">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_030.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="left_bowl_hull_031">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/left/hull_031.obj" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -997,10 +1183,196 @@
       </geometry>
       <material name="white"/>
     </visual>
-    <collision name="right_bowl_convex_compound">
+    <collision name="right_bowl_hull_000">
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/bowl_convex/right_compound.obj" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/bowl_convex/right/hull_000.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_001">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_001.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_002">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_002.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_003">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_003.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_004">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_004.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_005">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_005.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_006">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_006.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_007">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_007.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_008">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_008.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_009">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_009.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_010">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_010.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_011">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_011.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_012">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_012.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_013">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_013.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_014">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_014.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_015">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_015.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_016">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_016.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_017">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_017.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_018">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_018.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_019">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_019.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_020">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_020.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_021">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_021.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_022">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_022.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_023">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_023.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_024">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_024.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_025">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_025.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_026">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_026.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_027">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_027.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_028">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_028.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_029">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_029.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_030">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_030.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <collision name="right_bowl_hull_031">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/bowl_convex/right/hull_031.obj" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>

@@ -406,12 +406,14 @@ class IsaacGym(IsaacGymBase):
         asset_options = gymapi.AssetOptions()
 
         # wyh
-        asset_options.vhacd_enabled = True
-        asset_options.vhacd_params.max_convex_hulls = 32
         # Import each exported bowl submesh as its own convex collision shape.
-        asset_options.convex_decomposition_from_submeshes = bool(
-            getattr(asset_cfg, "convex_decomposition_from_submeshes", False)
-        )
+        use_submeshes = bool(getattr(asset_cfg, "convex_decomposition_from_submeshes", False))
+        asset_options.convex_decomposition_from_submeshes = use_submeshes
+        # VHACD would re-decompose the merged mesh and override the pre-split hulls,
+        # so only enable it when submesh decomposition is not requested.
+        asset_options.vhacd_enabled = not use_submeshes
+        if not use_submeshes:
+            asset_options.vhacd_params.max_convex_hulls = 32
 
         def set_value_if_not_none(prev_value, new_value):
             return new_value if new_value is not None else prev_value

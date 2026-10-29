@@ -16,7 +16,7 @@ rewards:
       teleop_body_rotation_extend: 0.5
       teleop_body_ang_velocity_extend: 0.5
       teleop_body_velocity_extend: 1.0
-      teleop_joint_position: 1.0
+      teleop_joint_position: 0.75
       teleop_joint_velocity: 0.5
       penalty_torques: -0.00001
       # penalty_dof_vel: -0.0001
@@ -28,9 +28,9 @@ rewards:
       ig_extended_hand: 2.0
       waist_dof: -50 #-100. #5.0
       hip_yaw_dof: -20 # for penalize hip yaw dof
-      ball_position: 4.0 #3.0
+      ball_position: 3.0 #3.0
       ball_rotation: 0.0
-      ball_velocity: 1.0
+      ball_velocity: 0.0
       ball_spin_axis_alignment: 0.0
       penalty_ball_spin_axis_alignment: 0.0
       interaction_graph: 2.0 #1.0
@@ -71,12 +71,12 @@ rewards:
     teleop_joint_pos: 1.0
     teleop_joint_vel: 1.0
 
-    ig_extended_hand: 0.02
+    ig_extended_hand: 0.05
     waist_dof: 0.05
     hip_yaw_dof: 0.05
     ball_position: [0.02, 0.05]
     ball_rotation: 0.05
-    ball_velocity: [0.02, 0.05]
+    ball_velocity: 0.05
     ball_spin_axis_alignment: 0.2
     interaction_graph: 0.05
     contact_graph: 0.05

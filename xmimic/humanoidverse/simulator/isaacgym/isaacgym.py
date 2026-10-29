@@ -248,6 +248,11 @@ class IsaacGym(BaseSimulator):
         gym_asset_file = os.path.basename(asset_path)
 
         asset_options = gymapi.AssetOptions()
+        # Use pre-split convex submeshes (e.g. 32-part hand bowl OBJ) when requested.
+        asset_options.convex_decomposition_from_submeshes = bool(
+            getattr(asset_cfg, "convex_decomposition_from_submeshes", False)
+        )
+        asset_options.vhacd_enabled = False
 
         def set_value_if_not_none(prev_value, new_value):
             return new_value if new_value is not None else prev_value
