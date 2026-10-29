@@ -37,6 +37,7 @@ obs:
       curr_interaction_graph,
       bodies_contact_force,
       history_critic,
+      object_dropout_active,
       amp_expert_dof_pos,
       amp_expert_dof_vel,
     ]
@@ -116,6 +117,7 @@ obs:
     local_ref_rigid_body_pos: 1.0,
     history_actor: 1.0,
     history_critic: 1.0,
+    object_dropout_active: 1.0,
     local_curr_ball_position: 1.0,
     local_ref_ball_position: 1.0,
     reference_command: 1.0,
@@ -150,6 +152,7 @@ obs:
     local_ref_rigid_body_pos: 0.0,
     history_actor: 0.0,
     history_critic: 0.0,
+    object_dropout_active: 0.0,
     local_curr_ball_position: 0.01,
     local_ref_ball_position: 0.0,
     reference_command: 0.0,
@@ -181,6 +184,7 @@ obs:
 
   obs_dims:
     - base_lin_vel: 3
+    - object_dropout_active: 1
     - base_ang_vel: 3
     - projected_gravity: 3
     - dof_pos: ${robot.dof_obs_size}

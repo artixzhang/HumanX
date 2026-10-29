@@ -138,6 +138,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         # Store per-env frozen root state (13-dim). Only rows where _freeze_obj_buf=True are meaningful.
         self._frozen_obj_root_state = torch.zeros((self.num_envs, 13), device=self.device, dtype=torch.float32)
         self._init_object_push()
+        self._init_object_dropout()
         # Per-env reset-time state delay offsets (seconds). Used to intentionally misalign initial states.
         # Backward compatible: default zeros -> no effect unless enable_state_delay_init is True.
         self._state_delay_init_offset_s_robot = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
@@ -1029,12 +1030,84 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         self._object_push_next_step[env_ids] = self.episode_length_buf[env_ids] + self._object_push_cooldown_steps
         self.need_to_refresh_envs[env_ids] = True
 
+    # ------------------------------------------------------------------
+    # Object dropout: teleport the object away at a random time in a small
+    # fraction of episodes so the policy also experiences "object lost" states.
+    # After dropout, object-related terminations and rewards are disabled.
+    # ------------------------------------------------------------------
+    def _init_object_dropout(self):
+        cfg = getattr(self.config.domain_rand, "object_dropout", None)
+        self._object_dropout_enabled = bool(getattr(cfg, "enabled", False))
+        # Always allocated so masking code stays branch-free.
+        self._object_dropout_active = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        self._object_dropout_step = torch.full((self.num_envs,), -1, device=self.device, dtype=torch.long)
+        if not self._object_dropout_enabled:
+            return
+        self._object_dropout_episode_prob = float(getattr(cfg, "episode_prob", 0.05))
+        self._object_dropout_apply_in_eval = bool(getattr(cfg, "apply_in_eval", False))
+        t_range = list(getattr(cfg, "trigger_time_range_s", [0.5, 8.0]))
+        self._object_dropout_step_range = (
+            max(1, math.ceil(float(t_range[0]) / self.dt)),
+            max(1, math.ceil(float(t_range[1]) / self.dt)),
+        )
+        self._object_dropout_radius_range = [float(v) for v in getattr(cfg, "radius_range", [0.5, 5.0])]
+        self._object_dropout_height_range = [float(v) for v in getattr(cfg, "height_range", [0.1, 1.5])]
+        if not (0.0 <= self._object_dropout_episode_prob <= 1.0):
+            raise ValueError("object_dropout episode_prob must be in [0, 1]")
+        if self._object_dropout_step_range[0] > self._object_dropout_step_range[1]:
+            raise ValueError("object_dropout trigger_time_range_s must be [low, high] with low <= high")
+
+    def _reset_object_dropout(self, env_ids):
+        self._object_dropout_active[env_ids] = False
+        self._object_dropout_step[env_ids] = -1
+        if not self._object_dropout_enabled:
+            return
+        if self.is_evaluating and not self._object_dropout_apply_in_eval:
+            return
+        selected = torch.rand(len(env_ids), device=self.device) < self._object_dropout_episode_prob
+        sel_ids = env_ids[selected]
+        if sel_ids.numel() == 0:
+            return
+        lo, hi = self._object_dropout_step_range
+        self._object_dropout_step[sel_ids] = torch.randint(lo, hi + 1, (sel_ids.numel(),), device=self.device)
+
+    def _apply_object_dropout(self, reset_env_ids):
+        """Teleport the object to a random position around the robot at the scheduled step."""
+        if not self._object_dropout_enabled or self._visualize_motion_data_only:
+            return
+        trigger = (~self._object_dropout_active & ~self._freeze_obj_buf
+                   & (self._object_dropout_step > 0)
+                   & (self.episode_length_buf >= self._object_dropout_step))
+        trigger[reset_env_ids] = False
+        env_ids = trigger.nonzero(as_tuple=False).flatten()
+        if env_ids.numel() == 0:
+            return
+        n = env_ids.numel()
+        r_lo, r_hi = self._object_dropout_radius_range
+        h_lo, h_hi = self._object_dropout_height_range
+        radius = torch.rand(n, device=self.device) * (r_hi - r_lo) + r_lo
+        angle = torch.rand(n, device=self.device) * 2 * math.pi
+        height = torch.rand(n, device=self.device) * (h_hi - h_lo) + h_lo
+        root_xy = self.simulator.robot_root_states[env_ids, :2]
+        self.simulator.object_root_state[env_ids, 0] = root_xy[:, 0] + radius * torch.cos(angle)
+        self.simulator.object_root_state[env_ids, 1] = root_xy[:, 1] + radius * torch.sin(angle)
+        self.simulator.object_root_state[env_ids, 2] = height
+        self.simulator.object_root_state[env_ids, 7:13] = 0.0
+        self._object_dropout_active[env_ids] = True
+        self.need_to_refresh_envs[env_ids] = True
+
+    def _get_obs_object_dropout_active(self):
+        """Privileged flag (critic only): 1 after object_dropout teleported the object away in this episode (stays 1 until reset), not a natural drop."""
+        return self._object_dropout_active.float().unsqueeze(-1)
+
     def _reset_tasks_callback(self, env_ids):
         if len(env_ids) == 0:
             return
         super()._reset_tasks_callback(env_ids)
         if getattr(self.config, "enable_rsi", False):
             self._rsi_pre_reset(env_ids)
+        # Must run after RSI so the finished episode's dropout flag is still visible there.
+        self._reset_object_dropout(env_ids)
 
         self._resample_motion_times(env_ids)
             
@@ -1096,6 +1169,8 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             return
         episode_steps = self._rsi_episode_step[env_ids]
         valid_mask = episode_steps > 0 #no valid episodes (e.g., initial reset before training starts)
+        # Episodes with object dropout have masked object rewards; exclude them from frame-reward stats.
+        valid_mask = valid_mask & ~self._object_dropout_active[env_ids]
         
         # Compute average reward for completed episodes (if any)
         if valid_mask.any():
@@ -1160,6 +1235,8 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             return
 
         super()._check_termination()
+        # Object-related terminations are disabled once the object has been dropped (object_dropout).
+        object_term_valid = ~self._object_dropout_active
         #motion
         if self.config.termination.terminate_when_motion_far:
             reset_buf_motion_far = torch.any(torch.norm(self.dif_global_body_pos, dim=-1) > self.terminate_when_motion_far_threshold, dim=-1)
@@ -1214,6 +1291,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
 
             p = self.config.termination.terminate_when_ball_status_far_p
             window_mask = self.episode_length_buf + (self.motion_start_times/self.dt).to(int) < self.stand_ref_episode_length
+            reset_buf_ball_status_far = reset_buf_ball_status_far & object_term_valid
             raw_ball_status_far = reset_buf_ball_status_far & window_mask
             applied_ball_status_far = (
                 reset_buf_ball_status_far & (torch.rand_like(reset_buf_ball_status_far.float()) < p)
@@ -1241,7 +1319,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             w_abs = torch.abs(q[:, 3]).clamp(max=1.0)
             rel_angle = 2.0 * torch.acos(w_abs)  # [0, pi]
 
-            reset_buf_ball_rot_far = rel_angle > self.terminate_when_ball_rotation_far_threshold
+            reset_buf_ball_rot_far = (rel_angle > self.terminate_when_ball_rotation_far_threshold) & object_term_valid
             p = getattr(self.config.termination, "terminate_when_ball_rotation_far_p", 1.0)
             window_mask = self.episode_length_buf + (self.motion_start_times/self.dt).to(int) < self.stand_ref_episode_length
             raw_ball_rot_far = reset_buf_ball_rot_far & window_mask
@@ -1261,7 +1339,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         if self.config.termination.terminate_by_low_obj_height:
             low_obj_height_mask = torch.any(
                 self.simulator.object_pos[:, 2:3] < self.config.termination_scales.termination_min_obj_height, dim=1
-            )
+            ) & object_term_valid
             self.reset_buf, self.time_out_buf, _ = apply_termination_mask(
                 self.log_dict, self.reset_buf, self.time_out_buf, "low_obj_height", low_obj_height_mask
             )
@@ -1270,7 +1348,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             ball_z_far_mask = (
                 torch.abs(self.simulator.object_pos[:, 2] - self.ref_object_root_pos[:, 2])
                 > self.terminate_when_ball_z_far_threshold
-            )
+            ) & object_term_valid
             self.reset_buf, self.time_out_buf, _ = apply_termination_mask(
                 self.log_dict, self.reset_buf, self.time_out_buf, "ball_z_far", ball_z_far_mask
             )
@@ -1308,7 +1386,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
 
         if self.config.termination.terminate_when_ig_status_far:
             reset_buf_ig_status_far = torch.any(torch.norm(self.dif_ig_extended_hand, dim=-1).unsqueeze(-1) > self.terminate_when_ig_status_far_threshold, dim=-1)
-            reset_buf_ig_status_far = torch.any(reset_buf_ig_status_far, dim=-1)
+            reset_buf_ig_status_far = torch.any(reset_buf_ig_status_far, dim=-1) & object_term_valid
             # self.reset_buf |= reset_buf_ig_status_far
 
             p = self.config.termination.terminate_when_ig_status_far_p
@@ -1337,9 +1415,10 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             reset_buf_ig_status_far = torch.any(reset_buf_ig_status_far, dim=-1)
             
             contact_conditioned_ig_status = torch.logical_and(reset_buf_ig_status_far, self.ref_obj_contact_status.bool())
+            contact_conditioned_ig_status = contact_conditioned_ig_status & object_term_valid
             # self.reset_buf |= reset_buf_ig_status_far
 
-            p = self.config.termination.contact_conditioned_ig_termination_p  
+            p = self.config.termination.contact_conditioned_ig_termination_p
             applied_contact_conditioned_ig_status = (
                 contact_conditioned_ig_status & (torch.rand_like(contact_conditioned_ig_status.float()) < p)
             ).bool()
@@ -1855,7 +1934,9 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         window_mask = (
             self.episode_length_buf + (self.motion_start_times / self.dt).to(int) < self.stand_ref_episode_length
         )
-        has_window = bool(torch.any(window_mask))
+        # Object-related rewards are only valid inside the window and while the object has not been dropped.
+        object_reward_mask = window_mask & ~self._object_dropout_active
+        has_window = bool(torch.any(object_reward_mask))
         
         for i in range(len(self.reward_functions)):
             name = self.reward_names[i]
@@ -1870,7 +1951,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
                     rew *= self.reward_penalty_scale
             # only use object_related_rewards when current time < stand_ref_episode_length
             if name in self.object_related_rewards:
-                rew = torch.where(window_mask, rew, rew * 0.)
+                rew = torch.where(object_reward_mask, rew, rew * 0.)
             self.rew_buf += rew
             self.episode_sums[name] += rew
         if self.config.rewards.only_positive_rewards:
@@ -1888,7 +1969,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
             missed_object_contact_error = (self.object_contact_status < 0).to(torch.float32)
             unexpected_object_contact_error = (self.object_contact_status > 0).to(torch.float32)
             contact_error = torch.maximum(forbidden_contact_error, object_contact_mismatch_error)
-            window_mask_f = window_mask.to(torch.float32)
+            window_mask_f = object_reward_mask.to(torch.float32)
             self._contact_error_count += contact_error * window_mask_f
             self._forbidden_contact_error_count += forbidden_contact_error * window_mask_f
             self._object_contact_mismatch_error_count += object_contact_mismatch_error * window_mask_f
@@ -2357,6 +2438,7 @@ class LeggedRobotMotionTrackingHOI(LeggedRobotBase):
         self.reset_envs_idx(env_ids)
         # Perturb surviving envs after rewards, then submit and refresh their observations below.
         self._apply_object_push(env_ids)
+        self._apply_object_dropout(env_ids)
 
         # set envs
         refresh_env_ids = self.need_to_refresh_envs.nonzero(as_tuple=False).flatten()
